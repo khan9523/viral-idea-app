@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
+// API URL - Auto-detects production vs local
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+
 function App() {
   const [prompt, setPrompt] = useState('')
   const [category, setCategory] = useState('General')
@@ -42,7 +45,7 @@ function App() {
     setResponse(null)
 
     try {
-      const res = await fetch('http://localhost:3001/generate', {
+      const res = await fetch(`${API_URL}/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -322,7 +325,7 @@ function App() {
       </main>
 
       <footer className="app-footer">
-        <p>🌐 Viral Idea App | Backend: http://localhost:3001</p>
+        <p>🌐 Viral Idea App | Backend: {API_URL}</p>
       </footer>
     </div>
   )
