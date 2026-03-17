@@ -231,5 +231,5 @@ git push
 **Congratulations! Your app is now live on the internet! 🎉**
 
 Share these URLs:
-- 🌐 Frontend: [Your Vercel URL]
-- 🤖 Backend: [Your Render URL]
+- 🌐 Frontend: [[Your VerceLl UR](https://viral-idea-app.vercel.app/)]
+- 🤖 Backend: [[Your Render URL](https://viral-idea-app.onrender.com/)]
