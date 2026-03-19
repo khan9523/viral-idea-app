@@ -55,28 +55,32 @@ function App() {
       // Parse the idea into multiple short ideas (simulate multiple cards)
       // In real scenario, API might return structured data
       if (data.success) {
+        // Format niche for better display
+        const nicheFormatted = niche.trim()
+        const nicheKeyword = nicheFormatted.split(' ')[0].toLowerCase() // First word for hashtags
+        
         // Create mock ideas from the response for demonstration
         const mockIdeas = [
           {
             id: 1,
-            idea: 'Transform your ' + niche + ' content into trending shorts',
+            idea: `Create a ${nicheFormatted} shorts video that starts with a surprising hook`,
             hook: 'Start with a surprising fact nobody knows',
-            title: 'The Ultimate ' + niche + ' Short',
-            hashtags: ['#' + niche, '#viralshorts', '#trending', '#content']
+            title: `The Ultimate ${nicheFormatted} Short`,
+            hashtags: [`#${nicheKeyword}`, '#viralshorts', '#trending', '#content']
           },
           {
             id: 2,
-            idea: 'Show the before and after in your ' + niche + ' niche',
+            idea: `Show the transformation or before-and-after in ${nicheFormatted}`,
             hook: 'Use pattern interrupts every 3 seconds',
             title: 'Transformation in 60 Seconds',
-            hashtags: ['#' + niche, '#beforeandafter', '#satisfying', '#shorts']
+            hashtags: [`#${nicheKeyword}`, '#beforeandafter', '#satisfying', '#shorts']
           },
           {
             id: 3,
-            idea: 'Create controversy (safely) in ' + niche,
+            idea: `Share a unique perspective or hot take about ${nicheFormatted}`,
             hook: 'Ask a polarizing question at the start',
-            title: 'Hot Take on ' + niche,
-            hashtags: ['#' + niche, '#controversy', '#opinion', '#trending']
+            title: `Hot Take on ${nicheFormatted}`,
+            hashtags: [`#${nicheKeyword}`, '#opinion', '#trending', '#viral']
           }
         ]
         setIdeas(mockIdeas)
