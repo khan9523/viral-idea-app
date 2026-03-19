@@ -57,30 +57,30 @@ function App() {
       if (data.success) {
         // Format niche for better display
         const nicheFormatted = niche.trim()
-        const nicheKeyword = nicheFormatted.split(' ')[0].toLowerCase() // First word for hashtags
+        const nicheWord = nicheFormatted.split(/\s+/)[0].toLowerCase() // First word for hashtags
         
-        // Create mock ideas from the response for demonstration
+        // Create diverse, practical viral short ideas
         const mockIdeas = [
           {
             id: 1,
-            idea: `Create a ${nicheFormatted} shorts video that starts with a surprising hook`,
-            hook: 'Start with a surprising fact nobody knows',
-            title: `The Ultimate ${nicheFormatted} Short`,
-            hashtags: [`#${nicheKeyword}`, '#viralshorts', '#trending', '#content']
+            idea: `Top 3 tips beginners don't know about ${nicheFormatted}`,
+            hook: 'Most people get this wrong...',
+            title: `${nicheFormatted} Secrets Nobody Talks About`,
+            hashtags: [`#${nicheWord}`, '#tips', '#shorts', '#viral']
           },
           {
             id: 2,
-            idea: `Show the transformation or before-and-after in ${nicheFormatted}`,
-            hook: 'Use pattern interrupts every 3 seconds',
-            title: 'Transformation in 60 Seconds',
-            hashtags: [`#${nicheKeyword}`, '#beforeandafter', '#satisfying', '#shorts']
+            idea: `Common mistake in ${nicheFormatted} and how to fix it in 60 seconds`,
+            hook: 'If you\'re doing this, you\'re losing out...',
+            title: `The Biggest ${nicheFormatted} Mistake`,
+            hashtags: [`#${nicheWord}`, '#mistakes', '#shorts', '#howto']
           },
           {
             id: 3,
-            idea: `Share a unique perspective or hot take about ${nicheFormatted}`,
-            hook: 'Ask a polarizing question at the start',
-            title: `Hot Take on ${nicheFormatted}`,
-            hashtags: [`#${nicheKeyword}`, '#opinion', '#trending', '#viral']
+            idea: `"Then vs Now" - How ${nicheFormatted} has changed`,
+            hook: 'You won\'t believe how different it was...',
+            title: `Then vs Now: ${nicheFormatted} Evolution`,
+            hashtags: [`#${nicheWord}`, '#evolution', '#trending', '#shorts']
           }
         ]
         setIdeas(mockIdeas)
