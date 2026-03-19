@@ -784,17 +784,25 @@ body {
   outline-offset: 2px;
 }
 
-.idea-card {
+.ai-response-box {
   background: #1e293b;
-  padding: 15px;
-  border-radius: 10px;
-  margin-bottom: 15px;
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 20px;
+  text-align: left;
 }
 
-.idea-card h3 {
-  margin-bottom: 5px;
+.ai-text {
+  white-space: pre-wrap;
+  font-family: system-ui;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-.idea-card p {
-  opacity: 0.8;
+.copy-btn {
+  margin-top: 15px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
 }

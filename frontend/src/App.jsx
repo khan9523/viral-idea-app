@@ -126,23 +126,23 @@ function App() {
             </div>
 
             {/* Ideas */}
-            {ideas.map((item, index) => {
-              const [title, ...rest] = item.content.split("\n")
+            <div className="ai-response-box">
+              <pre className="ai-text">
+              {ideas.map((item) => item.content).join("\n\n")}
+              </pre>
 
-              return (
-                <div key={index} className="idea-card">
-                  <h3>{title}</h3>
-                  <p>{rest.join(" ")}</p>
-
-                  <button
-                    onClick={() => copyToClipboard(item.content, index)}
-                    className={`copy-btn ${copiedId === index ? 'copied' : ''}`}
-                  >
-                    {copiedId === index ? '✅ Copied' : '📋 Copy'}
-                  </button>
-                </div>
-              )
-            })}
+              <button
+                onClick={() =>
+                  copyToClipboard(
+                  ideas.map((item) => item.content).join("\n\n"),
+                  0
+                )
+              }
+              className={`copy-btn ${copiedId === 0 ? 'copied' : ''}`}
+            >
+              {copiedId === 0 ? '✅ Copied' : '📋 Copy'}
+              </button>
+            </div>
 
             {/* Regenerate */}
             <button

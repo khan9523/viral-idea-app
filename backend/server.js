@@ -20,24 +20,21 @@ app.post("/generate", async (req, res) => {
     const prompt = `
     User request: "${userPrompt}"
 
-    Instructions:
-    - Keep output VERY short and clean
-    - Do NOT add introductions like "Sure" or explanations
-    - Do NOT use bold, markdown, or symbols
-   - Only return the final answer
+    STRICT RULES:
+    - No "Sure", no intro
+    - No markdown (**)
+    - No extra explanation
 
-    Format strictly like this:
+    FORMAT:
 
     Idea 1: Title
-    Short 2-line explanation
+    Short explanation
 
     Idea 2: Title
-    Short 2-line explanation
+    Short explanation
 
-    Rules:
-    - Max 4 lines per idea
-    - Keep it simple and professional
-    `;
+    Keep it clean and minimal.
+   `;
 
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
