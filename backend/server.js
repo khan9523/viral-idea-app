@@ -20,20 +20,24 @@ app.post("/generate", async (req, res) => {
     const prompt = `
     User request: "${userPrompt}"
 
-    Understand the request carefully.
+    Instructions:
+    - Keep output VERY short and clean
+    - Do NOT add introductions like "Sure" or explanations
+    - Do NOT use bold, markdown, or symbols
+   - Only return the final answer
+
+    Format strictly like this:
+
+    Idea 1: Title
+    Short 2-line explanation
+
+    Idea 2: Title
+    Short 2-line explanation
 
     Rules:
-    - If user only asks for ideas → return ONLY ideas with short context.
-    - If user asks for hooks → include hooks.
-    - If user asks for hashtags → include hashtags.
-    - Do NOT include anything extra.
-
-    Format:
-    Idea 1: Title
-    Context: short explanation
-
-    Keep it clean and simple.
-   `;
+    - Max 4 lines per idea
+    - Keep it simple and professional
+    `;
 
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",

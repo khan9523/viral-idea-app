@@ -783,3 +783,18 @@ body {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
 }
+
+.idea-card {
+  background: #1e293b;
+  padding: 15px;
+  border-radius: 10px;
+  margin-bottom: 15px;
+}
+
+.idea-card h3 {
+  margin-bottom: 5px;
+}
+
+.idea-card p {
+  opacity: 0.8;
+}
