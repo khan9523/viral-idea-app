@@ -41,7 +41,7 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          prompt: niche.trim(),
+          prompt: `Generate 5 creative viral YouTube Shorts ideas for "${niche.trim()}". For each idea include: What to film, Hook, and Hashtags. Make them actionable and viral-worthy.`,
           category: 'Viral Shorts'
         }),
       })
@@ -52,40 +52,15 @@ function App() {
 
       const data = await res.json()
       
-      // Parse the idea into multiple short ideas (simulate multiple cards)
-      // In real scenario, API might return structured data
-      if (data.success) {
-        // Format niche for better display
-        const nicheFormatted = niche.trim()
-        const nicheWord = nicheFormatted.split(/\s+/)[0].toLowerCase() // First word for hashtags
-        
-        // Create diverse, practical viral short ideas
-        const mockIdeas = [
-          {
-            id: 1,
-            idea: `Top 3 tips beginners don't know about ${nicheFormatted}`,
-            hook: 'Most people get this wrong...',
-            title: `${nicheFormatted} Secrets Nobody Talks About`,
-            hashtags: [`#${nicheWord}`, '#tips', '#shorts', '#viral']
-          },
-          {
-            id: 2,
-            idea: `Common mistake in ${nicheFormatted} and how to fix it in 60 seconds`,
-            hook: 'If you\'re doing this, you\'re losing out...',
-            title: `The Biggest ${nicheFormatted} Mistake`,
-            hashtags: [`#${nicheWord}`, '#mistakes', '#shorts', '#howto']
-          },
-          {
-            id: 3,
-            idea: `"Then vs Now" - How ${nicheFormatted} has changed`,
-            hook: 'You won\'t believe how different it was...',
-            title: `Then vs Now: ${nicheFormatted} Evolution`,
-            hashtags: [`#${nicheWord}`, '#evolution', '#trending', '#shorts']
-          }
-        ]
-        setIdeas(mockIdeas)
+      if (data.success && data.idea) {
+        // Use the AI-generated idea directly
+        setIdeas([{
+          id: 1,
+          content: data.idea,
+          timestamp: new Date().toLocaleTimeString()
+        }])
       } else {
-        setError('Failed to generate ideas')
+        setError('Failed to generate ideas. Make sure your backend has valid OpenAI API key.')
       }
     } catch (err) {
       setError(err.message || 'An error occurred while generating ideas')
@@ -98,9 +73,9 @@ function App() {
     await handleGenerate({ preventDefault: () => {} })
   }
 
-  const copyToClipboard = (text, id) => {
+  const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text)
-    setCopiedId(id)
+    setCopiedId(1)
     setTimeout(() => setCopiedId(null), 2000)
   }
 
@@ -153,59 +128,44 @@ function App() {
             )}
           </section>
 
-          {/* Results Section */}
+          {/* Results Section - Chat Style */}
           {ideas.length > 0 && (
             <section className="results-section">
-              <div className="results-header">
-                <h2>Your Viral Short Ideas</h2>
+              <div className="chat-container">
+                {/* User message */}
+                <div className="message message-user">
+                  <div className="message-content">💭 {niche}</div>
+                </div>
+
+                {/* AI response */}
+                <div className="message message-ai">
+                  <div className="message-content">
+                    <div className="ai-response-text">
+                      {ideas[0].content.split('\n').map((line, idx) => (
+                        line.trim() && (
+                          <p key={idx} className="response-line">
+                            {line}
+                          </p>
+                        )
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => copyToClipboard(ideas[0].content)}
+                    className={`copy-btn ${copiedId === 1 ? 'copied' : ''}`}
+                  >
+                    {copiedId === 1 ? '✅ Copied!' : '📋 Copy'}
+                  </button>
+                </div>
+
+                {/* Regenerate button */}
                 <button 
                   onClick={handleRegenerate}
                   disabled={loading}
-                  className="btn btn-secondary"
+                  className="btn btn-secondary regenerate-btn"
                 >
-                  🔄 Regenerate
+                  {loading ? '⏳ Generating...' : '🔄 Regenerate'}
                 </button>
-              </div>
-
-              <div className="ideas-grid">
-                {ideas.map((idea) => (
-                  <div 
-                    key={idea.id} 
-                    className="idea-card"
-                  >
-                    <div className="card-content">
-                      <div className="card-section">
-                        <h3 className="card-label">💡 Idea</h3>
-                        <p className="card-text">{idea.idea}</p>
-                      </div>
-
-                      <div className="card-section">
-                        <h3 className="card-label">🎣 Hook</h3>
-                        <p className="card-text">{idea.hook}</p>
-                      </div>
-
-                      <div className="card-section">
-                        <h3 className="card-label">📝 Title</h3>
-                        <p className="card-text">{idea.title}</p>
-                      </div>
-
-                      <div className="card-section">
-                        <h3 className="card-label">🏷️ Hashtags</h3>
-                        <p className="card-text">{idea.hashtags.join(' ')}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => copyToClipboard(
-                        `💡 ${idea.idea}\n🎣 ${idea.hook}\n📝 ${idea.title}\n🏷️ ${idea.hashtags.join(' ')}`,
-                        idea.id
-                      )}
-                      className={`copy-btn ${copiedId === idea.id ? 'copied' : ''}`}
-                    >
-                      {copiedId === idea.id ? '✅ Copied!' : '📋 Copy'}
-                    </button>
-                  </div>
-                ))}
               </div>
             </section>
           )}
