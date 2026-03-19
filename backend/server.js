@@ -15,16 +15,25 @@ const client = new OpenAI({
 
 app.post("/generate", async (req, res) => {
   try {
-    const { niche } = req.body;
+    const { prompt: userPrompt } = req.body;;
 
     const prompt = `
-Give 5 viral YouTube Shorts ideas for ${niche} niche.
-Include:
-- Hook
-- Title
-- Hashtags
-Make it for Indian audience.
-`;
+    User request: "${userPrompt}"
+
+    Understand the request carefully.
+
+    Rules:
+    - If user only asks for ideas → return ONLY ideas with short context.
+    - If user asks for hooks → include hooks.
+    - If user asks for hashtags → include hashtags.
+    - Do NOT include anything extra.
+
+    Format:
+    Idea 1: Title
+    Context: short explanation
+
+    Keep it clean and simple.
+   `;
 
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",

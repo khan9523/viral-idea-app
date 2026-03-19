@@ -40,10 +40,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          prompt: `Generate 5 creative viral YouTube Shorts ideas for "${niche.trim()}". For each idea include: What to film, Hook, and Hashtags. Make them actionable and viral-worthy.`,
-          category: 'Viral Shorts'
-        }),
+        body: JSON.stringify({ prompt: niche }),
       })
 
       if (!res.ok) {
