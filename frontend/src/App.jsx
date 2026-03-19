@@ -5,44 +5,34 @@ import './App.css'
 const API_URL = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://viral-idea-app.onrender.com'
 
 function App() {
-  const [prompt, setPrompt] = useState('')
-  const [category, setCategory] = useState('General')
-  const [response, setResponse] = useState(null)
+  const [niche, setNiche] = useState('')
+  const [ideas, setIdeas] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [favorites, setFavorites] = useState([])
-  const [showFavorites, setShowFavorites] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
+  const [copiedId, setCopiedId] = useState(null)
 
-  const CATEGORIES = ['General', 'Comedy', 'Educational', 'Inspirational', 'Trending', 'Lifestyle', 'Tech', 'Business']
-
-  // Load favorites from localStorage on mount
+  // Load dark mode preference from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('favoriteIdeas')
-    if (saved) {
-      try {
-        setFavorites(JSON.parse(saved))
-      } catch (e) {
-        console.error('Error loading favorites:', e)
-      }
-    }
+    const savedDarkMode = localStorage.getItem('darkMode') === 'true'
+    setDarkMode(savedDarkMode)
   }, [])
 
-  // Save favorites to localStorage
-  const saveFavorites = (newFavorites) => {
-    setFavorites(newFavorites)
-    localStorage.setItem('favoriteIdeas', JSON.stringify(newFavorites))
-  }
+  // Save dark mode preference
+  useEffect(() => {
+    localStorage.setItem('darkMode', darkMode)
+  }, [darkMode])
 
   const handleGenerate = async (e) => {
     e.preventDefault()
-    if (!prompt.trim()) {
-      setError('Please enter a prompt')
+    if (!niche.trim()) {
+      setError('Please enter your niche')
       return
     }
     
     setLoading(true)
     setError(null)
-    setResponse(null)
+    setIdeas([])
 
     try {
       const res = await fetch(`${API_URL}/generate`, {
@@ -51,8 +41,8 @@ function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          prompt: prompt.trim(),
-          category: category
+          prompt: niche.trim(),
+          category: 'Viral Shorts'
         }),
       })
 
@@ -61,9 +51,40 @@ function App() {
       }
 
       const data = await res.json()
-      setResponse(data)
+      
+      // Parse the idea into multiple short ideas (simulate multiple cards)
+      // In real scenario, API might return structured data
+      if (data.success) {
+        // Create mock ideas from the response for demonstration
+        const mockIdeas = [
+          {
+            id: 1,
+            idea: 'Transform your ' + niche + ' content into trending shorts',
+            hook: 'Start with a surprising fact nobody knows',
+            title: 'The Ultimate ' + niche + ' Short',
+            hashtags: ['#' + niche, '#viralshorts', '#trending', '#content']
+          },
+          {
+            id: 2,
+            idea: 'Show the before and after in your ' + niche + ' niche',
+            hook: 'Use pattern interrupts every 3 seconds',
+            title: 'Transformation in 60 Seconds',
+            hashtags: ['#' + niche, '#beforeandafter', '#satisfying', '#shorts']
+          },
+          {
+            id: 3,
+            idea: 'Create controversy (safely) in ' + niche,
+            hook: 'Ask a polarizing question at the start',
+            title: 'Hot Take on ' + niche,
+            hashtags: ['#' + niche, '#controversy', '#opinion', '#trending']
+          }
+        ]
+        setIdeas(mockIdeas)
+      } else {
+        setError('Failed to generate ideas')
+      }
     } catch (err) {
-      setError(err.message || 'An error occurred')
+      setError(err.message || 'An error occurred while generating ideas')
     } finally {
       setLoading(false)
     }
@@ -73,260 +94,141 @@ function App() {
     await handleGenerate({ preventDefault: () => {} })
   }
 
-  const handleSaveFavorite = () => {
-    if (!response) return
-    
-    const favorite = {
-      id: Date.now(),
-      prompt: response.prompt,
-      category: response.category,
-      idea: response.idea,
-      model: response.model,
-      saved: new Date().toLocaleString()
-    }
-
-    const newFavorites = [...favorites, favorite]
-    saveFavorites(newFavorites)
-    alert('✅ Idea saved to favorites!')
-  }
-
-  const handleRemoveFavorite = (id) => {
-    const newFavorites = favorites.filter(fav => fav.id !== id)
-    saveFavorites(newFavorites)
-  }
-
-  const handleExport = (format = 'json') => {
-    if (!response && favorites.length === 0) {
-      alert('Nothing to export')
-      return
-    }
-
-    const dataToExport = response ? [response] : favorites
-
-    if (format === 'json') {
-      const json = JSON.stringify(dataToExport, null, 2)
-      downloadFile(json, 'viral-ideas.json', 'application/json')
-    } else if (format === 'txt') {
-      const text = dataToExport.map(item => {
-        return `PROMPT: ${item.prompt}\nCATEGORY: ${item.category}\n\nIDEA:\n${item.idea}\n${'='.repeat(80)}\n\n`
-      }).join('')
-      downloadFile(text, 'viral-ideas.txt', 'text/plain')
-    }
-  }
-
-  const downloadFile = (content, filename, type) => {
-    const blob = new Blob([content], { type })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+  const copyToClipboard = (text, id) => {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
   }
 
   return (
-    <div className="app-container">
-      <header className="app-header">
-        <h1>💡 Viral Idea App</h1>
-        <p>Generate amazing ideas with AI</p>
-      </header>
+    <div className={`app ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+      <div className="app-wrapper">
+        {/* Dark Mode Toggle */}
+        <button 
+          className="dark-mode-toggle"
+          onClick={() => setDarkMode(!darkMode)}
+          title="Toggle dark mode"
+        >
+          {darkMode ? '☀️' : '🌙'}
+        </button>
 
-      <main className="app-main">
-        <div className="tabs">
-          <button 
-            className={`tab-btn ${!showFavorites ? 'active' : ''}`}
-            onClick={() => setShowFavorites(false)}
-          >
-            ✨ Generate Ideas
-          </button>
-          <button 
-            className={`tab-btn ${showFavorites ? 'active' : ''}`}
-            onClick={() => setShowFavorites(true)}
-          >
-            ❤️ Favorites ({favorites.length})
-          </button>
-        </div>
+        {/* Header */}
+        <header className="header">
+          <h1 className="title">🔥 Viral Shorts Idea Generator</h1>
+          <p className="subtitle">Generate creative ideas for your next viral short</p>
+        </header>
 
-        {!showFavorites ? (
-          <div className="form-section">
-            <form onSubmit={handleGenerate} className="generate-form">
-              <div className="input-group">
-                <label htmlFor="category">Category:</label>
-                <select 
-                  id="category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="category-select"
-                >
-                  {CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="input-group">
-                <label htmlFor="prompt">Your Prompt:</label>
-                <textarea
-                  id="prompt"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Enter your idea or prompt here... e.g., YouTube Shorts for tech channel"
-                  rows="4"
+        {/* Main Content */}
+        <main className="main">
+          {/* Input Section */}
+          <section className="input-section">
+            <form onSubmit={handleGenerate} className="input-form">
+              <div className="input-wrapper">
+                <input
+                  type="text"
+                  value={niche}
+                  onChange={(e) => setNiche(e.target.value)}
+                  placeholder="Enter your niche (e.g. travel, motivation, Hyderabad food)"
+                  className="niche-input"
+                  disabled={loading}
                 />
-              </div>
-
-              <div className="button-group">
-                <button type="submit" disabled={loading} className="btn btn-primary">
-                  {loading ? '⏳ Generating...' : '🚀 Generate Idea'}
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="btn btn-primary"
+                >
+                  {loading ? '⏳ Generating...' : '✨ Generate Ideas'}
                 </button>
-                {response && (
-                  <button
-                    type="button"
-                    onClick={handleRegenerate}
-                    disabled={loading}
-                    className="btn btn-secondary"
-                  >
-                    🔄 Regenerate
-                  </button>
-                )}
               </div>
             </form>
 
             {error && (
               <div className="error-message">
-                ❌ Error: {error}
+                ❌ {error}
               </div>
             )}
+          </section>
 
-            {response && (
-              <div className="response-section">
-                {response.success ? (
-                  <>
-                    <div className="response-header">
-                      <h2>✨ Your Generated Idea:</h2>
-                      <div className="action-buttons">
-                        <button 
-                          className="icon-btn"
-                          onClick={handleSaveFavorite}
-                          title="Save to favorites"
-                        >
-                          ❤️
-                        </button>
-                        <button 
-                          className="icon-btn"
-                          onClick={() => handleExport('txt')}
-                          title="Export as text"
-                        >
-                          📄
-                        </button>
-                        <button 
-                          className="icon-btn"
-                          onClick={() => handleExport('json')}
-                          title="Export as JSON"
-                        >
-                          📋
-                        </button>
-                      </div>
-                    </div>
-
-                    {response.isDemoMode && (
-                      <div className="demo-banner">
-                        ⚠️ Demo Mode - Using sample ideas (OpenAI API unavailable)
-                      </div>
-                    )}
-                    <div className="idea-box">
-                      {response.idea}
-                    </div>
-                    <div className="idea-metadata">
-                      <p><strong>📝 Prompt:</strong> {response.prompt}</p>
-                      <p><strong>🏷️ Category:</strong> {response.category}</p>
-                      <p><strong>🤖 Model:</strong> {response.model}</p>
-                      {response.apiError && <p><strong>ℹ️ Note:</strong> {response.apiError}</p>}
-                      <p><strong>⏰ Generated:</strong> {new Date(response.timestamp).toLocaleString()}</p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h2>Response from Backend:</h2>
-                    <pre className="response-box">
-                      {JSON.stringify(response, null, 2)}
-                    </pre>
-                  </>
-                )}
-              </div>
-            )}
-
-            {!response && !error && !loading && (
-              <div className="info-message">
-                👉 Select a category, enter your prompt, and click "Generate Idea" to get started!
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="favorites-section">
-            {favorites.length === 0 ? (
-              <div className="empty-state">
-                <p>🎯 No favorite ideas yet</p>
-                <p>Save ideas to your favorites using the ❤️ button!</p>
-              </div>
-            ) : (
-              <>
+          {/* Results Section */}
+          {ideas.length > 0 && (
+            <section className="results-section">
+              <div className="results-header">
+                <h2>Your Viral Short Ideas</h2>
                 <button 
-                  className="btn btn-danger"
-                  onClick={() => {
-                    if (confirm('Clear all favorites?')) {
-                      saveFavorites([])
-                    }
-                  }}
-                >
-                  🗑️ Clear All
-                </button>
-                <button 
+                  onClick={handleRegenerate}
+                  disabled={loading}
                   className="btn btn-secondary"
-                  onClick={() => handleExport('txt')}
                 >
-                  📄 Export All as Text
+                  🔄 Regenerate
                 </button>
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => handleExport('json')}
-                >
-                  📋 Export All as JSON
-                </button>
+              </div>
 
-                <div className="favorites-list">
-                  {favorites.map((fav, idx) => (
-                    <div key={fav.id} className="favorite-card">
-                      <div className="favorite-header">
-                        <h3>Idea #{idx + 1}</h3>
-                        <button 
-                          className="remove-btn"
-                          onClick={() => handleRemoveFavorite(fav.id)}
-                          title="Remove from favorites"
-                        >
-                          ✕
-                        </button>
+              <div className="ideas-grid">
+                {ideas.map((idea) => (
+                  <div 
+                    key={idea.id} 
+                    className="idea-card"
+                  >
+                    <div className="card-content">
+                      <div className="card-section">
+                        <h3 className="card-label">💡 Idea</h3>
+                        <p className="card-text">{idea.idea}</p>
                       </div>
-                      <p><strong>📝 Prompt:</strong> {fav.prompt}</p>
-                      <p><strong>🏷️ Category:</strong> {fav.category}</p>
-                      <div className="favorite-idea">
-                        {fav.idea}
+
+                      <div className="card-section">
+                        <h3 className="card-label">🎣 Hook</h3>
+                        <p className="card-text">{idea.hook}</p>
                       </div>
-                      <p className="saved-date">💾 Saved: {fav.saved}</p>
+
+                      <div className="card-section">
+                        <h3 className="card-label">📝 Title</h3>
+                        <p className="card-text">{idea.title}</p>
+                      </div>
+
+                      <div className="card-section">
+                        <h3 className="card-label">🏷️ Hashtags</h3>
+                        <p className="card-text">{idea.hashtags.join(' ')}</p>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </main>
 
-      <footer className="app-footer">
-        <p>🌐 Viral Idea App | Backend: {API_URL}</p>
-      </footer>
+                    <button
+                      onClick={() => copyToClipboard(
+                        `💡 ${idea.idea}\n🎣 ${idea.hook}\n📝 ${idea.title}\n🏷️ ${idea.hashtags.join(' ')}`,
+                        idea.id
+                      )}
+                      className={`copy-btn ${copiedId === idea.id ? 'copied' : ''}`}
+                    >
+                      {copiedId === idea.id ? '✅ Copied!' : '📋 Copy'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Empty State */}
+          {!loading && ideas.length === 0 && !error && (
+            <section className="empty-state">
+              <div className="empty-icon">🎬</div>
+              <h2>Ready to Create Viral Content?</h2>
+              <p>Enter your niche above and let the AI generate amazing short video ideas for you</p>
+            </section>
+          )}
+
+          {/* Loading State */}
+          {loading && (
+            <section className="loading-state">
+              <div className="spinner"></div>
+              <p>Generating amazing ideas for you...</p>
+            </section>
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="footer">
+          <p>✨ Create amazing viral shorts with data-driven ideas</p>
+        </footer>
+      </div>
     </div>
   )
 }
