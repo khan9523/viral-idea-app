@@ -806,3 +806,33 @@ body {
   border-radius: 8px;
   cursor: pointer;
 }
+
+
+.layout {
+  display: flex;
+}
+
+.sidebar {
+  width: 250px;
+  background: #111;
+  height: 100vh;
+  padding: 15px;
+  overflow-y: auto;
+}
+
+.history-item {
+  padding: 10px;
+  margin-bottom: 8px;
+  background: #1e293b;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.history-item:hover {
+  background: #334155;
+}
+
+.main-content {
+  flex: 1;
+  padding: 20px;
+}
