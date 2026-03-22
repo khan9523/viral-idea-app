@@ -38,7 +38,7 @@ function App() {
     })
 
     const data = await res.json()
-    
+    console.log("API RESPONSE:", data);
     setHistory(data)
   }
 
