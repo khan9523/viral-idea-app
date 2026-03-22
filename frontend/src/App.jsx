@@ -3,7 +3,7 @@ import './App.css'
 
 const API_URL =
   window.location.hostname === 'localhost'
-    ? 'http://localhost:3001'
+    ? 'http://localhost:5000'
     : 'https://viral-idea-app.onrender.com'
 
 function App() {
@@ -38,7 +38,7 @@ function App() {
     })
 
     const data = await res.json()
-    console.log("API RESPONSE:", data);
+    
     setHistory(data)
   }
 
