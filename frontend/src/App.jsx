@@ -30,7 +30,7 @@ function App() {
     localStorage.setItem('darkMode', darkMode)
   }, [darkMode])
 
-  // Check auth
+  // Auth check
   useEffect(() => {
     const token = localStorage.getItem("token")
 
@@ -56,7 +56,6 @@ function App() {
 
       const data = await res.json()
       setHistory(data)
-
     } catch (err) {
       console.log("History error:", err)
     }
@@ -72,20 +71,10 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          email: email,
-          password: password
-        }),
+        body: JSON.stringify({ email, password }),
       })
 
-      let data
-      try {
-        data = await res.json()
-      } catch {
-        const text = await res.text()
-        console.log("RAW LOGIN RESPONSE:", text)
-        throw new Error("Server not returning JSON")
-      }
+      const data = await res.json()
 
       if (data.token) {
         localStorage.setItem("token", data.token)
@@ -109,20 +98,10 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          email: email,
-          password: password
-        }),
+        body: JSON.stringify({ email, password }),
       })
 
-      let data
-      try {
-        data = await res.json()
-      } catch {
-        const text = await res.text()
-        console.log("RAW SIGNUP RESPONSE:", text)
-        throw new Error("Server not returning JSON")
-      }
+      const data = await res.json()
 
       if (res.ok) {
         alert(data.message || "Signup success")
@@ -136,7 +115,7 @@ function App() {
     }
   }
 
-  // Generate ideas
+  // Generate
   const handleGenerate = async (e) => {
     e.preventDefault()
 
@@ -175,7 +154,7 @@ function App() {
         setError(data.error || 'Failed to generate ideas')
       }
 
-    } catch (err) {
+    } catch {
       setError('Network error')
     } finally {
       setLoading(false)
@@ -197,10 +176,8 @@ function App() {
     setIsLoggedIn(false)
   }
 
-  // Loading state
-  if (checkingAuth) {
-    return <div>Loading...</div>
-  }
+  // Loading
+  if (checkingAuth) return <div>Loading...</div>
 
   // Login UI
   if (!isLoggedIn) {
@@ -236,7 +213,6 @@ function App() {
     <div className={`app ${darkMode ? 'dark-mode' : 'light-mode'}`}>
       <div className="layout">
 
-        {/* Sidebar */}
         <div className="sidebar">
           <h3>Chats</h3>
 
@@ -246,24 +222,18 @@ function App() {
             <div
               key={chat._id}
               className="history-item"
-              onClick={() =>
-                setIdeas([{ content: chat.response }])
-              }
+              onClick={() => setIdeas([{ content: chat.response }])}
             >
               {chat.prompt}
             </div>
           ))}
         </div>
 
-        {/* Main */}
         <div className="main-content">
 
           <button onClick={handleLogout}>Logout</button>
 
-          <button
-            className="dark-mode-toggle"
-            onClick={() => setDarkMode(!darkMode)}
-          >
+          <button onClick={() => setDarkMode(!darkMode)}>
             {darkMode ? '☀️' : '🌙'}
           </button>
 
@@ -282,10 +252,10 @@ function App() {
             </button>
           </form>
 
-          {error && <p className="error">{error}</p>}
+          {error && <p>{error}</p>}
 
           {ideas.length > 0 && (
-            <div className="ai-response-box">
+            <div>
               <pre>
                 {ideas.map((item) => item.content).join("\n\n")}
               </pre>
