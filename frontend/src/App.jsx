@@ -14,6 +14,9 @@ function App() {
   const [error, setError] = useState(null)
   const [darkMode, setDarkMode] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
 
   // Dark mode load
   useEffect(() => {
@@ -24,6 +27,65 @@ function App() {
   useEffect(() => {
     localStorage.setItem('darkMode', darkMode)
   }, [darkMode])
+
+  useEffect(() => {
+    const token = localStorage.getItem("token")
+    if (token) setIsLoggedIn(true)
+  }, [])
+
+
+
+
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await res.json()
+
+      if (data.token) {
+        localStorage.setItem("token", data.token)
+        setIsLoggedIn(true)
+      } else {
+        alert(data.error || "Login failed")
+      }
+
+    } catch (err) {
+      console.log(err)
+      alert("Login error")
+    }
+  }
+
+
+  const handleSignup = async () => {
+    try {
+      const res = await fetch(`${API_URL}/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await res.json()
+
+      alert(data.message || data.error)
+
+    } catch (err) {
+      alert("Signup failed")
+    }
+  }
+
+
+
 
   // Fetch chat history
   const fetchHistory = async () => {
@@ -98,7 +160,7 @@ function App() {
   }
 
   const handleRegenerate = async () => {
-    await handleGenerate({ preventDefault: () => {} })
+    await handleGenerate({ preventDefault: () => { } })
   }
 
   const copyToClipboard = (text, id) => {
@@ -107,110 +169,142 @@ function App() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+
+  if (!isLoggedIn) {
   return (
-    <div className={`app ${darkMode ? 'dark-mode' : 'light-mode'}`}>
-      <div className="layout">
+    <div className="login-container">
+      <h2>Login</h2>
 
-        {/* SIDEBAR */}
-        <div className="sidebar">
-          <h3>Chats</h3>
+      <form onSubmit={handleLogin}>
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-          {history.length === 0 && <p>No chats yet</p>}
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-          {history.map((chat) => (
-            <div
-              key={chat._id}
-              className="history-item"
-              onClick={() =>
-                setIdeas([{ content: chat.response }])
-              }
-            >
-              {chat.prompt}
-            </div>
-          ))}
-        </div>
+        <button type="submit">Login</button>
+      </form>
 
-        {/* MAIN CONTENT */}
-        <div className="main-content">
+      <button onClick={handleSignup}>
+        Signup
+      </button>
+    </div>
+    )
+  }
 
-          {/* Dark mode */}
-          <button
-            className="dark-mode-toggle"
-            onClick={() => setDarkMode(!darkMode)}
+  return (
+
+  <div className={`app ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+    <div className="layout">
+
+      {/* SIDEBAR */}
+      <div className="sidebar">
+        <h3>Chats</h3>
+
+        {history.length === 0 && <p>No chats yet</p>}
+
+        {history.map((chat) => (
+          <div
+            key={chat._id}
+            className="history-item"
+            onClick={() =>
+              setIdeas([{ content: chat.response }])
+            }
           >
-            {darkMode ? '☀️' : '🌙'}
+            {chat.prompt}
+          </div>
+        ))}
+      </div>
+
+      {/* MAIN CONTENT */}
+      <div className="main-content">
+
+        {/* Dark mode */}
+        <button
+          className="dark-mode-toggle"
+          onClick={() => setDarkMode(!darkMode)}
+        >
+          {darkMode ? '☀️' : '🌙'}
+        </button>
+
+        {/* Header */}
+        <header className="header">
+          <h1 className="title">🔥 Viral Shorts Idea Generator</h1>
+          <p className="subtitle">
+            Generate clean and powerful short video ideas
+          </p>
+        </header>
+
+        {/* Input */}
+        <form onSubmit={handleGenerate} className="input-wrapper">
+          <input
+            type="text"
+            value={niche}
+            onChange={(e) => setNiche(e.target.value)}
+            placeholder="e.g. travel, motivation, Hyderabad food"
+            className="niche-input"
+            disabled={loading}
+          />
+
+          <button className="btn btn-primary" disabled={loading}>
+            {loading ? 'Generating...' : 'Generate'}
           </button>
+        </form>
 
-          {/* Header */}
-          <header className="header">
-            <h1 className="title">🔥 Viral Shorts Idea Generator</h1>
-            <p className="subtitle">
-              Generate clean and powerful short video ideas
-            </p>
-          </header>
+        {error && <p className="error">{error}</p>}
 
-          {/* Input */}
-          <form onSubmit={handleGenerate} className="input-wrapper">
-            <input
-              type="text"
-              value={niche}
-              onChange={(e) => setNiche(e.target.value)}
-              placeholder="e.g. travel, motivation, Hyderabad food"
-              className="niche-input"
-              disabled={loading}
-            />
+        {/* Results */}
+        {ideas.length > 0 && (
+          <div className="results">
 
-            <button className="btn btn-primary" disabled={loading}>
-              {loading ? 'Generating...' : 'Generate'}
-            </button>
-          </form>
-
-          {error && <p className="error">{error}</p>}
-
-          {/* Results */}
-          {ideas.length > 0 && (
-            <div className="results">
-
-              <div className="ai-response-box">
-                <pre className="ai-text">
-                  {ideas.map((item) => item.content).join("\n\n")}
-                </pre>
-
-                <button
-                  onClick={() =>
-                    copyToClipboard(
-                      ideas.map((item) => item.content).join("\n\n"),
-                      0
-                    )
-                  }
-                  className={`copy-btn ${copiedId === 0 ? 'copied' : ''}`}
-                >
-                  {copiedId === 0 ? '✅ Copied' : '📋 Copy'}
-                </button>
-              </div>
+            <div className="ai-response-box">
+              <pre className="ai-text">
+                {ideas.map((item) => item.content).join("\n\n")}
+              </pre>
 
               <button
-                onClick={handleRegenerate}
-                className="btn btn-secondary"
-                disabled={loading}
+                onClick={() =>
+                  copyToClipboard(
+                    ideas.map((item) => item.content).join("\n\n"),
+                    0
+                  )
+                }
+                className={`copy-btn ${copiedId === 0 ? 'copied' : ''}`}
               >
-                🔄 Regenerate
+                {copiedId === 0 ? '✅ Copied' : '📋 Copy'}
               </button>
-
             </div>
-          )}
 
-          {/* Empty */}
-          {!loading && ideas.length === 0 && !error && (
-            <div className="empty">
-              <h2>Start generating viral ideas 🚀</h2>
-              <p>Enter a niche and get clean, usable ideas instantly</p>
-            </div>
-          )}
+            <button
+              onClick={handleRegenerate}
+              className="btn btn-secondary"
+              disabled={loading}
+            >
+              🔄 Regenerate
+            </button>
 
-        </div>
+          </div>
+        )}
+
+        {/* Empty */}
+        {!loading && ideas.length === 0 && !error && (
+          <div className="empty">
+            <h2>Start generating viral ideas 🚀</h2>
+            <p>Enter a niche and get clean, usable ideas instantly</p>
+          </div>
+        )}
+
       </div>
     </div>
+  </div>
   )
 }
 

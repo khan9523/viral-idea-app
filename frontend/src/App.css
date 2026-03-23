@@ -836,3 +836,20 @@ body {
   flex: 1;
   padding: 20px;
 }
+
+.login-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+  margin: 100px auto;
+}
+
+.login-container input {
+  padding: 10px;
+}
+
+.login-container button {
+  padding: 10px;
+  cursor: pointer;
+}
