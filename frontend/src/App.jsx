@@ -56,7 +56,10 @@ function App() {
         body: JSON.stringify({ email, password }),
       })
 
-      const data = await res.json()
+      const API_URL =
+        window.location.hostname === 'localhost'
+          ? 'http://localhost:5000'
+          : 'https://viral-idea-app.onrender.com')
 
       if (data.token) {
         localStorage.setItem("token", data.token)
@@ -85,7 +88,15 @@ function App() {
       }),
     })
 
-    const data = await res.json()
+    let data;
+
+    try {
+      data = await res.json()
+    } catch (err) {
+      const text = await res.text()
+      console.log("RAW RESPONSE:", text)
+      throw new Error("Server not returning JSON")
+    }
 
     console.log("SIGNUP RESPONSE:", data)
 
