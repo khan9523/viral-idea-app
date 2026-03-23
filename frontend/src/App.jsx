@@ -14,12 +14,13 @@ function App() {
   const [error, setError] = useState(null)
   const [darkMode, setDarkMode] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
+
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [checkingAuth, setCheckingAuth] = useState(true)
 
-  // Dark mode load
+  // Dark mode
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('darkMode') === 'true'
     setDarkMode(savedDarkMode)
@@ -29,21 +30,39 @@ function App() {
     localStorage.setItem('darkMode', darkMode)
   }, [darkMode])
 
+  // Check auth
   useEffect(() => {
-  const token = localStorage.getItem("token")
+    const token = localStorage.getItem("token")
 
-  if (token) {
-    setIsLoggedIn(true)
-    fetchHistory()
+    if (token) {
+      setIsLoggedIn(true)
+      fetchHistory()
+    }
+
+    setCheckingAuth(false)
+  }, [])
+
+  // Fetch history
+  const fetchHistory = async () => {
+    const token = localStorage.getItem("token")
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API_URL}/history`, {
+        headers: {
+          Authorization: "Bearer " + token,
+        },
+      })
+
+      const data = await res.json()
+      setHistory(data)
+
+    } catch (err) {
+      console.log("History error:", err)
+    }
   }
 
-  setCheckingAuth(false) // 👈 IMPORTANT
-}, [])
-
-
-
-
-
+  // Login
   const handleLogin = async (e) => {
     e.preventDefault()
 
@@ -53,89 +72,71 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email: email,
+          password: password
+        }),
       })
 
-      const API_URL =
-        window.location.hostname === 'localhost'
-          ? 'http://localhost:5000'
-          : 'https://viral-idea-app.onrender.com')
+      let data
+      try {
+        data = await res.json()
+      } catch {
+        const text = await res.text()
+        console.log("RAW LOGIN RESPONSE:", text)
+        throw new Error("Server not returning JSON")
+      }
 
       if (data.token) {
         localStorage.setItem("token", data.token)
         setIsLoggedIn(true)
+        fetchHistory()
       } else {
         alert(data.error || "Login failed")
       }
 
     } catch (err) {
-      console.log(err)
+      console.log("LOGIN ERROR:", err)
       alert("Login error")
     }
   }
 
-
+  // Signup
   const handleSignup = async () => {
-  try {
-    const res = await fetch(`${API_URL}/signup`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: email,
-        password: password
-      }),
-    })
-
-    let data;
-
     try {
-      data = await res.json()
+      const res = await fetch(`${API_URL}/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password
+        }),
+      })
+
+      let data
+      try {
+        data = await res.json()
+      } catch {
+        const text = await res.text()
+        console.log("RAW SIGNUP RESPONSE:", text)
+        throw new Error("Server not returning JSON")
+      }
+
+      if (res.ok) {
+        alert(data.message || "Signup success")
+      } else {
+        alert(data.error || "Signup failed")
+      }
+
     } catch (err) {
-      const text = await res.text()
-      console.log("RAW RESPONSE:", text)
-      throw new Error("Server not returning JSON")
+      console.log("SIGNUP ERROR:", err)
+      alert("Network error")
     }
-
-    console.log("SIGNUP RESPONSE:", data)
-
-    if (res.ok) {
-      alert(data.message || "Signup success")
-    } else {
-      alert(data.error || "Signup failed")
-    }
-
-  } catch (err) {
-    console.log("SIGNUP ERROR:", err)
-    alert("Network error")
-  }
-}
-
-
-
-
-  // Fetch chat history
-  const fetchHistory = async () => {
-    const token = localStorage.getItem("token")
-
-    if (!token) return
-
-    const res = await fetch(`${API_URL}/history`, {
-      headers: {
-        Authorization: "Bearer " + token,
-      },
-    })
-
-    const data = await res.json()
-    console.log("API RESPONSE:", data);
-    setHistory(data)
   }
 
-  useEffect(() => {
-    fetchHistory()
-  }, [])
-
+  // Generate ideas
   const handleGenerate = async (e) => {
     e.preventDefault()
 
@@ -158,10 +159,6 @@ function App() {
         body: JSON.stringify({ prompt: niche }),
       })
 
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`)
-      }
-
       const data = await res.json()
 
       if (data.result) {
@@ -173,22 +170,20 @@ function App() {
         }))
 
         setIdeas(formattedIdeas)
-
-        // Refresh history
         fetchHistory()
       } else {
-        setError('Failed to generate ideas')
+        setError(data.error || 'Failed to generate ideas')
       }
 
     } catch (err) {
-      setError(err.message || 'Something went wrong')
+      setError('Network error')
     } finally {
       setLoading(false)
     }
   }
 
   const handleRegenerate = async () => {
-    await handleGenerate({ preventDefault: () => { } })
+    await handleGenerate({ preventDefault: () => {} })
   }
 
   const copyToClipboard = (text, id) => {
@@ -197,108 +192,101 @@ function App() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem("token")
+    setIsLoggedIn(false)
+  }
 
-    if (checkingAuth) {
-     return <div>Loading...</div>
-    }
+  // Loading state
+  if (checkingAuth) {
+    return <div>Loading...</div>
+  }
 
+  // Login UI
   if (!isLoggedIn) {
-  return (
-    <div className="login-container">
-      <h2>Login</h2>
+    return (
+      <div className="login-container">
+        <h2>Login</h2>
 
-      <form onSubmit={handleLogin}>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+        <form onSubmit={handleLogin}>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
 
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
-        <button type="submit">Login</button>
-      </form>
+          <button type="submit">Login</button>
+        </form>
 
-      <button onClick={handleSignup}>
-        Signup
-      </button>
-    </div>
+        <button onClick={handleSignup}>Signup</button>
+      </div>
     )
   }
 
+  // Main UI
   return (
+    <div className={`app ${darkMode ? 'dark-mode' : 'light-mode'}`}>
+      <div className="layout">
 
-  <div className={`app ${darkMode ? 'dark-mode' : 'light-mode'}`}>
-    <div className="layout">
+        {/* Sidebar */}
+        <div className="sidebar">
+          <h3>Chats</h3>
 
-      {/* SIDEBAR */}
-      <div className="sidebar">
-        <h3>Chats</h3>
+          {history.length === 0 && <p>No chats yet</p>}
 
-        {history.length === 0 && <p>No chats yet</p>}
+          {history.map((chat) => (
+            <div
+              key={chat._id}
+              className="history-item"
+              onClick={() =>
+                setIdeas([{ content: chat.response }])
+              }
+            >
+              {chat.prompt}
+            </div>
+          ))}
+        </div>
 
-        {history.map((chat) => (
-          <div
-            key={chat._id}
-            className="history-item"
-            onClick={() =>
-              setIdeas([{ content: chat.response }])
-            }
+        {/* Main */}
+        <div className="main-content">
+
+          <button onClick={handleLogout}>Logout</button>
+
+          <button
+            className="dark-mode-toggle"
+            onClick={() => setDarkMode(!darkMode)}
           >
-            {chat.prompt}
-          </div>
-        ))}
-      </div>
-
-      {/* MAIN CONTENT */}
-      <div className="main-content">
-
-        {/* Dark mode */}
-        <button
-          className="dark-mode-toggle"
-          onClick={() => setDarkMode(!darkMode)}
-        >
-          {darkMode ? '☀️' : '🌙'}
-        </button>
-
-        {/* Header */}
-        <header className="header">
-          <h1 className="title">🔥 Viral Shorts Idea Generator</h1>
-          <p className="subtitle">
-            Generate clean and powerful short video ideas
-          </p>
-        </header>
-
-        {/* Input */}
-        <form onSubmit={handleGenerate} className="input-wrapper">
-          <input
-            type="text"
-            value={niche}
-            onChange={(e) => setNiche(e.target.value)}
-            placeholder="e.g. travel, motivation, Hyderabad food"
-            className="niche-input"
-            disabled={loading}
-          />
-
-          <button className="btn btn-primary" disabled={loading}>
-            {loading ? 'Generating...' : 'Generate'}
+            {darkMode ? '☀️' : '🌙'}
           </button>
-        </form>
 
-        {error && <p className="error">{error}</p>}
+          <h1>🔥 Viral Shorts Idea Generator</h1>
 
-        {/* Results */}
-        {ideas.length > 0 && (
-          <div className="results">
+          <form onSubmit={handleGenerate}>
+            <input
+              type="text"
+              value={niche}
+              onChange={(e) => setNiche(e.target.value)}
+              placeholder="Enter your niche"
+              disabled={loading}
+            />
+            <button type="submit">
+              {loading ? 'Generating...' : 'Generate'}
+            </button>
+          </form>
 
+          {error && <p className="error">{error}</p>}
+
+          {ideas.length > 0 && (
             <div className="ai-response-box">
-              <pre className="ai-text">
+              <pre>
                 {ideas.map((item) => item.content).join("\n\n")}
               </pre>
 
@@ -309,34 +297,18 @@ function App() {
                     0
                   )
                 }
-                className={`copy-btn ${copiedId === 0 ? 'copied' : ''}`}
               >
-                {copiedId === 0 ? '✅ Copied' : '📋 Copy'}
+                {copiedId === 0 ? 'Copied' : 'Copy'}
+              </button>
+
+              <button onClick={handleRegenerate}>
+                Regenerate
               </button>
             </div>
-
-            <button
-              onClick={handleRegenerate}
-              className="btn btn-secondary"
-              disabled={loading}
-            >
-              🔄 Regenerate
-            </button>
-
-          </div>
-        )}
-
-        {/* Empty */}
-        {!loading && ideas.length === 0 && !error && (
-          <div className="empty">
-            <h2>Start generating viral ideas 🚀</h2>
-            <p>Enter a niche and get clean, usable ideas instantly</p>
-          </div>
-        )}
-
+          )}
+        </div>
       </div>
     </div>
-  </div>
   )
 }
 
