@@ -17,6 +17,7 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [checkingAuth, setCheckingAuth] = useState(true)
 
   // Dark mode load
   useEffect(() => {
@@ -29,9 +30,15 @@ function App() {
   }, [darkMode])
 
   useEffect(() => {
-    const token = localStorage.getItem("token")
-    if (token) setIsLoggedIn(true)
-  }, [])
+  const token = localStorage.getItem("token")
+
+  if (token) {
+    setIsLoggedIn(true)
+    fetchHistory()
+  }
+
+  setCheckingAuth(false) // 👈 IMPORTANT
+}, [])
 
 
 
@@ -66,23 +73,33 @@ function App() {
 
 
   const handleSignup = async () => {
-    try {
-      const res = await fetch(`${API_URL}/signup`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
-      })
+  try {
+    const res = await fetch(`${API_URL}/signup`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: email,
+        password: password
+      }),
+    })
 
-      const data = await res.json()
+    const data = await res.json()
 
-      alert(data.message || data.error)
+    console.log("SIGNUP RESPONSE:", data)
 
-    } catch (err) {
-      alert("Signup failed")
+    if (res.ok) {
+      alert(data.message || "Signup success")
+    } else {
+      alert(data.error || "Signup failed")
     }
+
+  } catch (err) {
+    console.log("SIGNUP ERROR:", err)
+    alert("Network error")
   }
+}
 
 
 
@@ -169,6 +186,10 @@ function App() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+
+    if (checkingAuth) {
+     return <div>Loading...</div>
+    }
 
   if (!isLoggedIn) {
   return (

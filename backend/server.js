@@ -7,10 +7,11 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import OpenAI from "openai";
+import mongoose from "mongoose";
 
 dotenv.config();
 
-import mongoose from "mongoose";
+// ✅ MongoDB
 console.log("ENV:", process.env.MONGO_URI);
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected ✅"))
@@ -20,13 +21,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ✅ OpenAI
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+
+// ================= GENERATE =================
 app.post("/generate", authMiddleware, async (req, res) => {
   try {
     const { prompt: userPrompt } = req.body;
+
+    if (!userPrompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
 
     const prompt = `
 User request: "${userPrompt}"
@@ -47,7 +55,6 @@ Short explanation
 Keep it clean and minimal.
 `;
 
-    // ✅ Step 1: Generate AI response
     const response = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
@@ -55,7 +62,7 @@ Keep it clean and minimal.
 
     const result = response.choices[0].message.content;
 
-    // ✅ Step 2: Save chat AFTER getting result
+    // Save chat
     const newChat = new Chat({
       userId: req.user.id,
       prompt: userPrompt,
@@ -64,32 +71,37 @@ Keep it clean and minimal.
 
     await newChat.save();
 
-    // ✅ Step 3: Send response
     res.json({ result });
 
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: "Error generating ideas" });
+    console.log("REAL GENERATE ERROR:", error);
+    res.status(500).json({ error: error.message });
   }
 });
 
 
+// ================= SIGNUP =================
 app.post("/signup", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // check user exists
+    console.log("SIGNUP BODY:", req.body);
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
     const existingUser = await User.findOne({ email });
+
     if (existingUser) {
       return res.status(400).json({ error: "User already exists" });
     }
 
-    // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
       email,
-      password: hashedPassword
+      password: hashedPassword,
     });
 
     await newUser.save();
@@ -97,13 +109,22 @@ app.post("/signup", async (req, res) => {
     res.json({ message: "User created successfully" });
 
   } catch (err) {
-    res.status(500).json({ error: "Signup failed" });
+    console.log("REAL SIGNUP ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
+
+// ================= LOGIN =================
 app.post("/login", async (req, res) => {
   try {
+    console.log("LOGIN BODY:", req.body);
+
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
 
     const user = await User.findOne({ email });
 
@@ -117,31 +138,37 @@ app.post("/login", async (req, res) => {
       return res.status(400).json({ error: "Wrong password" });
     }
 
-    // create token
     const token = jwt.sign(
       { id: user._id },
-      "secret123",
+      process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
     res.json({ token });
 
   } catch (err) {
-    res.status(500).json({ error: "Login failed" });
+    console.log("REAL LOGIN ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
+
+// ================= HISTORY =================
 app.get("/history", authMiddleware, async (req, res) => {
   try {
     const chats = await Chat.find({ userId: req.user.id })
       .sort({ createdAt: -1 });
 
     res.json(chats);
+
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch history" });
+    console.log("REAL HISTORY ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
+
+// ================= SERVER =================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
