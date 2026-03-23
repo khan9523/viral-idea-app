@@ -9,6 +9,19 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true
+  },
+  plan: {
+    type: String,
+    enum: ["free", "premium"],
+    default: "free"
+  },
+  usageCount: {
+    type: Number,
+    default: 0
+  },
+  lastReset: {
+    type: Date,
+    default: Date.now
   }
 });
 

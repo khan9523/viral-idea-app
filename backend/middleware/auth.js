@@ -8,7 +8,7 @@ export const authMiddleware = (req, res, next) => {
       return res.status(401).json({ error: "No token" });
     }
 
-    const decoded = jwt.verify(token, "secret123");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret123");
 
     req.user = decoded; // contains user id
 

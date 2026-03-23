@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 const API_URL =
@@ -6,48 +6,81 @@ const API_URL =
     ? 'http://localhost:5000'
     : 'https://viral-idea-app.onrender.com'
 
-// ── Sidebar ──────────────────────────────────────────────────────────────────
-function Sidebar({ history, activeChatId, onSelectChat, onNewChat, darkMode, onToggleDark, onLogout }) {
+const CATEGORIES = ['All', 'Funny', 'Educational', 'Viral']
+
+const tryParseIdeas = (content) => {
+  if (!content) return []
+  try {
+    const parsed = JSON.parse(content)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item) => item?.title && item?.description && item?.category)
+  } catch {
+    return []
+  }
+}
+
+const ideaKey = (idea) => `${idea.title}__${idea.category}`
+
+function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading }) {
   return (
     <aside className="sidebar">
       <div className="sidebar-header">
-        <span className="sidebar-logo">🔥 ViralAI</span>
-        <button className="icon-btn" title="New chat" onClick={onNewChat}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14"/>
+        <span className="sidebar-logo">ViralAI</span>
+      </div>
+
+      <div className="plan-card">
+        <span className={`plan-badge ${usage?.plan === 'premium' ? 'premium' : 'free'}`}>
+          {usage?.plan === 'premium' ? 'Premium' : 'Free'}
+        </span>
+
+        <div className="usage-meta">
+          {usage?.plan === 'premium' ? (
+            <p>Unlimited generations</p>
+          ) : (
+            <p>{usage?.remaining ?? 0} / {usage?.dailyLimit ?? 5} generations left today</p>
+          )}
+        </div>
+
+        {usage?.plan !== 'premium' && (
+          <button className="upgrade-btn" onClick={onUpgrade} disabled={paymentLoading}>
+            {paymentLoading ? 'Redirecting...' : 'Upgrade to Premium'}
+          </button>
+        )}
+      </div>
+
+      <div className="sidebar-new-chat-wrap">
+        <button className="sidebar-new-chat" title="New chat" onClick={onNewChat}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 5v14M5 12h14" />
           </svg>
+          New chat
         </button>
       </div>
 
       <div className="sidebar-section-label">Recent chats</div>
 
       <nav className="chat-list">
-        {history.length === 0 && (
-          <p className="sidebar-empty">No chats yet</p>
-        )}
-        {history.map((chat) => (
+        {chats.length === 0 && <p className="sidebar-empty">No chats yet</p>}
+        {chats.map((chat) => (
           <button
             key={chat._id}
-            className={`chat-item${activeChatId === chat._id ? ' active' : ''}`}
-            onClick={() => onSelectChat(chat)}
-            title={chat.prompt}
+            className={`chat-item${currentChatId === chat._id ? ' active' : ''}`}
+            onClick={() => onSelectChat(chat._id)}
+            title={chat.title || 'New Chat'}
           >
             <svg className="chat-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            <span className="chat-item-text">{chat.prompt}</span>
+            <span className="chat-item-text">{chat.title || 'New Chat'}</span>
           </button>
         ))}
       </nav>
 
       <div className="sidebar-footer">
         <button className="icon-btn footer-btn" onClick={onToggleDark} title="Toggle dark mode">
-          {darkMode ? '☀️' : '🌙'}
+          {darkMode ? 'Light' : 'Dark'}
         </button>
         <button className="icon-btn footer-btn logout-btn" onClick={onLogout} title="Logout">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
-          </svg>
           Logout
         </button>
       </div>
@@ -55,56 +88,88 @@ function Sidebar({ history, activeChatId, onSelectChat, onNewChat, darkMode, onT
   )
 }
 
-// ── Message bubble ────────────────────────────────────────────────────────────
-function Message({ msg, index, copiedId, onCopy }) {
-  const isUser = msg.role === 'user'
+function IdeasGrid({ ideas, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, savedIdeaKeys, onGenerateScript, scriptLoadingKey }) {
+  const filteredIdeas = useMemo(() => {
+    if (filterCategory === 'All') return ideas
+    return ideas.filter((idea) => idea.category === filterCategory)
+  }, [ideas, filterCategory])
+
+  if (!filteredIdeas.length) {
+    return <p className="no-ideas">No ideas in this category yet.</p>
+  }
+
   return (
-    <div className={`message-row ${isUser ? 'user-row' : 'assistant-row'}`}>
-      {!isUser && (
-        <div className="avatar assistant-avatar" aria-label="Assistant">
-          🤖
-        </div>
-      )}
-      <div className={`bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
-        <p className="bubble-text">{msg.content}</p>
-        {!isUser && (
-          <button
-            className={`copy-btn${copiedId === index ? ' copied' : ''}`}
-            onClick={() => onCopy(msg.content, index)}
-            title="Copy"
-          >
-            {copiedId === index ? (
-              <>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                Copied
-              </>
-            ) : (
-              <>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-                </svg>
-                Copy
-              </>
-            )}
-          </button>
-        )}
-      </div>
-      {isUser && (
-        <div className="avatar user-avatar" aria-label="You">
-          🧑
-        </div>
-      )}
+    <div className="ideas-grid">
+      {filteredIdeas.map((idea, idx) => {
+        const key = `${ideaKey(idea)}-${idx}`
+        const isSaved = savedIdeaKeys.has(ideaKey(idea))
+
+        return (
+          <article className="idea-card" key={key}>
+            <h4 className="idea-title">{idea.title}</h4>
+            <p className="idea-description">{idea.description}</p>
+
+            <div className="idea-footer">
+              <span className="category-tag">{idea.category}</span>
+              <div className="idea-actions">
+                <button className="idea-action-btn" onClick={() => onCopyIdea(idea, key)}>
+                  {copiedIdeaId === key ? 'Copied' : 'Copy'}
+                </button>
+                <button className="idea-action-btn save" onClick={() => onSaveIdea(idea)}>
+                  {isSaved ? 'Saved' : 'Save idea'}
+                </button>
+                <button
+                  className="idea-action-btn script-btn"
+                  onClick={() => onGenerateScript(idea, key)}
+                  disabled={scriptLoadingKey === key}
+                >
+                  {scriptLoadingKey === key ? 'Generating...' : 'Generate Script'}
+                </button>
+              </div>
+            </div>
+          </article>
+        )
+      })}
     </div>
   )
 }
 
-// ── Thinking indicator ────────────────────────────────────────────────────────
+function Message({ msg, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, savedIdeaKeys, onGenerateScript, scriptLoadingKey }) {
+  const isUser = msg.role === 'user'
+  const ideas = !isUser ? (Array.isArray(msg.ideas) ? msg.ideas : tryParseIdeas(msg.content)) : []
+
+  return (
+    <div className={`message-row ${isUser ? 'user-row' : 'assistant-row'}`}>
+      {!isUser && <div className="avatar assistant-avatar" aria-label="Assistant">AI</div>}
+
+      <div className={`bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
+        {isUser && <p className="bubble-text">{msg.content}</p>}
+
+        {!isUser && ideas.length > 0 && (
+          <IdeasGrid
+            ideas={ideas}
+            filterCategory={filterCategory}
+            onCopyIdea={onCopyIdea}
+            onSaveIdea={onSaveIdea}
+            copiedIdeaId={copiedIdeaId}
+            savedIdeaKeys={savedIdeaKeys}
+            onGenerateScript={onGenerateScript}
+            scriptLoadingKey={scriptLoadingKey}
+          />
+        )}
+
+        {!isUser && ideas.length === 0 && <p className="bubble-text">{msg.content}</p>}
+      </div>
+
+      {isUser && <div className="avatar user-avatar" aria-label="You">YOU</div>}
+    </div>
+  )
+}
+
 function ThinkingBubble() {
   return (
     <div className="message-row assistant-row">
-      <div className="avatar assistant-avatar">🤖</div>
+      <div className="avatar assistant-avatar">AI</div>
       <div className="bubble assistant-bubble thinking-bubble">
         <span className="dot" /><span className="dot" /><span className="dot" />
       </div>
@@ -112,11 +177,10 @@ function ThinkingBubble() {
   )
 }
 
-// ── Login / Auth screen ───────────────────────────────────────────────────────
 function AuthScreen({ onLogin, onSignup }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState('login') // 'login' | 'signup'
+  const [mode, setMode] = useState('login')
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -127,9 +191,8 @@ function AuthScreen({ onLogin, onSignup }) {
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <div className="auth-logo">🔥</div>
         <h1 className="auth-title">ViralAI</h1>
-        <p className="auth-subtitle">Your viral ideas generator</p>
+        <p className="auth-subtitle">Generate structured content ideas</p>
 
         <div className="auth-tabs">
           <button className={`auth-tab${mode === 'login' ? ' active' : ''}`} onClick={() => setMode('login')}>Login</button>
@@ -162,15 +225,92 @@ function AuthScreen({ onLogin, onSignup }) {
   )
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────────
+function UpgradeModal({ open, onClose, onUpgrade, paymentLoading }) {
+  if (!open) return null
+
+  return (
+    <div className="upgrade-modal-overlay" onClick={onClose}>
+      <div className="upgrade-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Daily limit reached</h3>
+        <p>Free plan includes 5 generations per day. Upgrade for unlimited generations.</p>
+
+        <div className="upgrade-modal-actions">
+          <button className="idea-action-btn" onClick={onClose}>Maybe later</button>
+          <button className="upgrade-btn" onClick={onUpgrade} disabled={paymentLoading}>
+            {paymentLoading ? 'Processing...' : 'Upgrade to Premium'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ScriptModal({ script, idea, open, onClose, onCopy, copied }) {
+  if (!open || !script) return null
+
+  return (
+    <div className="script-modal-overlay" onClick={onClose}>
+      <div className="script-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="script-modal-header">
+          <h3 className="script-modal-title">Video Script</h3>
+          <button className="script-modal-close" onClick={onClose} aria-label="Close">&#x2715;</button>
+        </div>
+
+        {idea && <p className="script-idea-label">{idea.title}</p>}
+
+        <div className="script-section">
+          <label className="script-label">Hook</label>
+          <p className="script-hook">{script.hook}</p>
+        </div>
+
+        <div className="script-section">
+          <label className="script-label">Script</label>
+          <p className="script-body">{script.script}</p>
+        </div>
+
+        <div className="script-section">
+          <label className="script-label">Call to Action</label>
+          <p className="script-cta">{script.cta}</p>
+        </div>
+
+        <div className="script-section">
+          <label className="script-label">Hashtags</label>
+          <div className="script-hashtags">
+            {script.hashtags.map((tag, i) => (
+              <span key={i} className="script-hashtag">{tag}</span>
+            ))}
+          </div>
+        </div>
+
+        <div className="script-modal-footer">
+          <button className="idea-action-btn" onClick={onCopy}>
+            {copied ? 'Copied!' : 'Copy Script'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
+  const [currentChatId, setCurrentChatId] = useState(null)
+  const [chats, setChats] = useState([])
   const [messages, setMessages] = useState([])
-  const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(false)
-  const [darkMode, setDarkMode] = useState(false)
-  const [copiedId, setCopiedId] = useState(null)
+  const [darkMode, setDarkMode] = useState(true)
   const [input, setInput] = useState('')
-  const [activeChatId, setActiveChatId] = useState(null)
+  const [copiedIdeaId, setCopiedIdeaId] = useState('')
+  const [filterCategory, setFilterCategory] = useState('All')
+  const [savedIdeas, setSavedIdeas] = useState([])
+  const [activeScript, setActiveScript] = useState(null)
+  const [activeScriptIdea, setActiveScriptIdea] = useState(null)
+  const [scriptLoadingKey, setScriptLoadingKey] = useState(null)
+  const [scriptCopied, setScriptCopied] = useState(false)
+
+  const [usage, setUsage] = useState({ plan: 'free', usageCount: 0, remaining: 5, dailyLimit: 5 })
+  const [showUpgradePopup, setShowUpgradePopup] = useState(false)
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentSuccess, setPaymentSuccess] = useState('')
 
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
@@ -178,10 +318,20 @@ function App() {
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
 
-  // ── Persist dark mode ──
+  const savedIdeaKeys = useMemo(() => new Set(savedIdeas.map(ideaKey)), [savedIdeas])
+
   useEffect(() => {
-    const saved = localStorage.getItem('darkMode') === 'true'
-    setDarkMode(saved)
+    const saved = localStorage.getItem('darkMode')
+    setDarkMode(saved === null ? true : saved === 'true')
+
+    const savedIdeasRaw = localStorage.getItem('savedIdeas')
+    if (savedIdeasRaw) {
+      try {
+        setSavedIdeas(JSON.parse(savedIdeasRaw))
+      } catch {
+        setSavedIdeas([])
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -189,33 +339,98 @@ function App() {
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
 
-  // ── Auth check ──
+  useEffect(() => {
+    localStorage.setItem('savedIdeas', JSON.stringify(savedIdeas))
+  }, [savedIdeas])
+
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (token) {
       setIsLoggedIn(true)
-      fetchHistory()
+      fetchChats()
+      fetchUsage()
     }
     setCheckingAuth(false)
   }, [])
 
-  // ── Auto-scroll ──
+  useEffect(() => {
+    if (!isLoggedIn) return
+
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get('session_id')
+
+    if (sessionId) {
+      verifyPayment(sessionId)
+    }
+  }, [isLoggedIn])
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  // ── API helpers ──
-  const fetchHistory = async () => {
+  const authHeaders = () => ({
+    'Content-Type': 'application/json',
+    Authorization: 'Bearer ' + localStorage.getItem('token'),
+  })
+
+  const fetchUsage = async () => {
     const token = localStorage.getItem('token')
     if (!token) return
+
     try {
-      const res = await fetch(`${API_URL}/history`, {
+      const res = await fetch(`${API_URL}/usage`, {
         headers: { Authorization: 'Bearer ' + token },
       })
+      if (!res.ok) return
       const data = await res.json()
-      if (Array.isArray(data)) setHistory(data)
+      setUsage(data)
     } catch (err) {
-      console.error('History error:', err)
+      console.error('Usage error:', err)
+    }
+  }
+
+  const fetchChats = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    try {
+      const res = await fetch(`${API_URL}/chats`, {
+        headers: { Authorization: 'Bearer ' + token },
+      })
+      if (!res.ok) return
+
+      const data = await res.json()
+      if (Array.isArray(data)) setChats(data)
+    } catch (err) {
+      console.error('Chats error:', err)
+    }
+  }
+
+  const createChat = async () => {
+    const res = await fetch(`${API_URL}/chat`, {
+      method: 'POST',
+      headers: authHeaders(),
+    })
+
+    if (!res.ok) throw new Error('Failed to create chat')
+
+    const data = await res.json()
+    return data.chat
+  }
+
+  const loadChat = async (chatId) => {
+    try {
+      const res = await fetch(`${API_URL}/chat/${chatId}`, {
+        headers: authHeaders(),
+      })
+
+      if (!res.ok) return
+
+      const data = await res.json()
+      setCurrentChatId(data.chat._id)
+      setMessages(Array.isArray(data.chat.messages) ? data.chat.messages : [])
+    } catch (err) {
+      console.error('Load chat error:', err)
     }
   }
 
@@ -226,11 +441,13 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       })
+
       const data = await res.json()
       if (data.token) {
         localStorage.setItem('token', data.token)
         setIsLoggedIn(true)
-        fetchHistory()
+        fetchChats()
+        fetchUsage()
       } else {
         alert(data.error || 'Login failed')
       }
@@ -262,35 +479,105 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('token')
     setIsLoggedIn(false)
+    setCurrentChatId(null)
+    setChats([])
     setMessages([])
-    setHistory([])
-    setActiveChatId(null)
+    setUsage({ plan: 'free', usageCount: 0, remaining: 5, dailyLimit: 5 })
   }
 
-  // ── Send message ──
+  const verifyPayment = async (sessionId) => {
+    setPaymentLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/billing/verify-session`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ sessionId }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setPaymentSuccess('Payment successful. You are now Premium.')
+        fetchUsage()
+        const url = new URL(window.location.href)
+        url.searchParams.delete('session_id')
+        window.history.replaceState({}, '', url)
+      } else {
+        setPaymentSuccess(data.error || 'Payment verification failed')
+      }
+    } catch {
+      setPaymentSuccess('Payment verification failed')
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
+  const handleUpgrade = async () => {
+    setPaymentLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/billing/create-checkout-session`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Could not start payment')
+        return
+      }
+
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (err) {
+      console.error('Upgrade error:', err)
+      alert('Payment initialization failed')
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
   const handleSend = async (e) => {
     e?.preventDefault()
     const text = input.trim()
     if (!text || loading) return
 
-    const userMsg = { role: 'user', content: text }
-    setMessages((prev) => [...prev, userMsg])
+    const optimisticUserMsg = { role: 'user', content: text }
+    setMessages((prev) => [...prev, optimisticUserMsg])
     setInput('')
     setLoading(true)
 
     try {
-      const res = await fetch(`${API_URL}/generate`, {
+      let chatId = currentChatId
+      if (!chatId) {
+        const createdChat = await createChat()
+        chatId = createdChat._id
+        setCurrentChatId(chatId)
+      }
+
+      const res = await fetch(`${API_URL}/chat/${chatId}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + localStorage.getItem('token'),
-        },
-        body: JSON.stringify({ prompt: text }),
+        headers: authHeaders(),
+        body: JSON.stringify({ message: text }),
       })
+
       const data = await res.json()
-      const reply = data.result || data.error || 'Something went wrong.'
-      setMessages((prev) => [...prev, { role: 'assistant', content: reply }])
-      fetchHistory()
+
+      if (!res.ok) {
+        if (data.code === 'LIMIT_EXCEEDED') {
+          setShowUpgradePopup(true)
+          setUsage((prev) => ({ ...prev, ...data }))
+          setMessages((prev) => prev.slice(0, -1))
+          setInput(text)
+          return
+        }
+        throw new Error(data.error || 'Failed to send message')
+      }
+
+      const nextMessages = Array.isArray(data.chat?.messages) ? data.chat.messages : []
+      setMessages(nextMessages)
+      setCurrentChatId(data.chat?._id || chatId)
+      if (data.usage) setUsage(data.usage)
+      fetchChats()
     } catch {
       setMessages((prev) => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }])
     } finally {
@@ -299,34 +586,72 @@ function App() {
     }
   }
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend()
+  const handleSelectChat = (chatId) => {
+    loadChat(chatId)
+  }
+
+  const handleNewChat = async () => {
+    try {
+      const createdChat = await createChat()
+      setCurrentChatId(createdChat._id)
+      setMessages([])
+      fetchChats()
+      setTimeout(() => inputRef.current?.focus(), 50)
+    } catch (err) {
+      console.error('Create chat error:', err)
     }
   }
 
-  const handleSelectChat = (chat) => {
-    setActiveChatId(chat._id)
-    setMessages([
-      { role: 'user', content: chat.prompt },
-      { role: 'assistant', content: chat.response },
-    ])
-  }
-
-  const handleNewChat = () => {
-    setMessages([])
-    setActiveChatId(null)
-    setTimeout(() => inputRef.current?.focus(), 50)
-  }
-
-  const copyToClipboard = (text, id) => {
+  const handleCopyIdea = (idea, key) => {
+    const text = `${idea.title}\n${idea.description}\nCategory: ${idea.category}`
     navigator.clipboard.writeText(text)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
+    setCopiedIdeaId(key)
+    setTimeout(() => setCopiedIdeaId(''), 1500)
   }
 
-  // ── Renders ──
+  const handleSaveIdea = (idea) => {
+    setSavedIdeas((prev) => {
+      const exists = prev.some((item) => ideaKey(item) === ideaKey(idea))
+      if (exists) return prev
+      return [idea, ...prev]
+    })
+  }
+
+  const handleGenerateScript = async (idea, key) => {
+    setScriptLoadingKey(key)
+    try {
+      const res = await fetch(`${API_URL}/generate-script`, {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ idea: `${idea.title}: ${idea.description}` }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Script generation failed')
+        return
+      }
+      setActiveScript(data.script)
+      setActiveScriptIdea(idea)
+    } catch {
+      alert('Network error. Could not generate script.')
+    } finally {
+      setScriptLoadingKey(null)
+    }
+  }
+
+  const handleCopyScript = () => {
+    if (!activeScript) return
+    const text = [
+      `Hook: ${activeScript.hook}`,
+      `Script: ${activeScript.script}`,
+      `CTA: ${activeScript.cta}`,
+      `Hashtags: ${activeScript.hashtags.join(' ')}`,
+    ].join('\n\n')
+    navigator.clipboard.writeText(text)
+    setScriptCopied(true)
+    setTimeout(() => setScriptCopied(false), 1500)
+  }
+
   if (checkingAuth) {
     return (
       <div className="splash">
@@ -341,24 +666,48 @@ function App() {
 
   return (
     <div className={`app-shell ${darkMode ? 'dark' : 'light'}`}>
+      {paymentLoading && (
+        <div className="payment-loader-overlay">
+          <div className="payment-loader-card">
+            <div className="spinner" />
+            <p>Processing payment...</p>
+          </div>
+        </div>
+      )}
+
       <Sidebar
-        history={history}
-        activeChatId={activeChatId}
+        chats={chats}
+        currentChatId={currentChatId}
         onSelectChat={handleSelectChat}
         onNewChat={handleNewChat}
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((d) => !d)}
         onLogout={handleLogout}
+        usage={usage}
+        onUpgrade={handleUpgrade}
+        paymentLoading={paymentLoading}
       />
 
       <main className="chat-main">
-        {/* ── Messages area ── */}
+        <header className="chat-topbar">
+          <span className="chat-topbar-title">AI Ideas Studio</span>
+
+          <div className="topbar-actions">
+            <select className="category-filter" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+              {CATEGORIES.map((category) => (
+                <option key={category} value={category}>{category}</option>
+              ))}
+            </select>
+          </div>
+        </header>
+
+        {paymentSuccess && <div className="payment-success-banner">{paymentSuccess}</div>}
+
         <div className="messages-area">
           {messages.length === 0 && (
             <div className="welcome-screen">
-              <div className="welcome-icon">🔥</div>
-              <h2 className="welcome-title">What viral idea can I spark today?</h2>
-              <p className="welcome-sub">Type your niche or topic and get scroll-stopping content ideas instantly.</p>
+              <h2 className="welcome-title">Generate structured idea cards</h2>
+              <p className="welcome-sub">Ask your topic. AI returns clean JSON cards with title, description, and category.</p>
             </div>
           )}
 
@@ -366,9 +715,13 @@ function App() {
             <Message
               key={i}
               msg={msg}
-              index={i}
-              copiedId={copiedId}
-              onCopy={copyToClipboard}
+              filterCategory={filterCategory}
+              onCopyIdea={handleCopyIdea}
+              onSaveIdea={handleSaveIdea}
+              copiedIdeaId={copiedIdeaId}
+              savedIdeaKeys={savedIdeaKeys}
+              onGenerateScript={handleGenerateScript}
+              scriptLoadingKey={scriptLoadingKey}
             />
           ))}
 
@@ -376,17 +729,21 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* ── Input bar ── */}
         <div className="input-bar">
           <form className="input-form" onSubmit={handleSend}>
             <textarea
               ref={inputRef}
               className="chat-input"
               rows={1}
-              placeholder="Message ViralAI..."
+              placeholder="Describe a niche or content idea..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSend()
+                }
+              }}
               disabled={loading}
             />
             <button
@@ -396,14 +753,30 @@ function App() {
               aria-label="Send"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="22" y1="2" x2="11" y2="13"/>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
               </svg>
             </button>
           </form>
           <p className="input-hint">Press Enter to send · Shift+Enter for new line</p>
         </div>
       </main>
+
+      <UpgradeModal
+        open={showUpgradePopup}
+        onClose={() => setShowUpgradePopup(false)}
+        onUpgrade={handleUpgrade}
+        paymentLoading={paymentLoading}
+      />
+
+      <ScriptModal
+        script={activeScript}
+        idea={activeScriptIdea}
+        open={activeScript !== null}
+        onClose={() => { setActiveScript(null); setActiveScriptIdea(null) }}
+        onCopy={handleCopyScript}
+        copied={scriptCopied}
+      />
     </div>
   )
 }
