@@ -21,11 +21,12 @@ const tryParseIdeas = (content) => {
 
 const ideaKey = (idea) => `${idea.title}__${idea.category}`
 
-function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading }) {
+function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading, open, onClose }) {
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
       <div className="sidebar-header">
         <span className="sidebar-logo">ViralAI</span>
+        <button className="sidebar-close-btn" onClick={onClose} aria-label="Close menu">&#x2715;</button>
       </div>
 
       <div className="plan-card">
@@ -110,22 +111,24 @@ function IdeasGrid({ ideas, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId
             <p className="idea-description">{idea.description}</p>
 
             <div className="idea-footer">
-              <span className="category-tag">{idea.category}</span>
-              <div className="idea-actions">
-                <button className="idea-action-btn" onClick={() => onCopyIdea(idea, key)}>
-                  {copiedIdeaId === key ? 'Copied' : 'Copy'}
-                </button>
-                <button className="idea-action-btn save" onClick={() => onSaveIdea(idea)}>
-                  {isSaved ? 'Saved' : 'Save idea'}
-                </button>
-                <button
-                  className="idea-action-btn script-btn"
-                  onClick={() => onGenerateScript(idea, key)}
-                  disabled={scriptLoadingKey === key}
-                >
-                  {scriptLoadingKey === key ? 'Generating...' : 'Generate Script'}
-                </button>
+              <div className="idea-footer-top">
+                <span className="category-tag">{idea.category}</span>
+                <div className="idea-actions">
+                  <button className="idea-action-btn" onClick={() => onCopyIdea(idea, key)}>
+                    {copiedIdeaId === key ? 'Copied' : 'Copy'}
+                  </button>
+                  <button className="idea-action-btn save" onClick={() => onSaveIdea(idea)}>
+                    {isSaved ? 'Saved' : 'Save'}
+                  </button>
+                </div>
               </div>
+              <button
+                className="idea-action-btn script-btn idea-script-full"
+                onClick={() => onGenerateScript(idea, key)}
+                disabled={scriptLoadingKey === key}
+              >
+                {scriptLoadingKey === key ? 'Generating script...' : '🎬 Generate Script'}
+              </button>
             </div>
           </article>
         )
@@ -302,6 +305,7 @@ function App() {
   const [copiedIdeaId, setCopiedIdeaId] = useState('')
   const [filterCategory, setFilterCategory] = useState('All')
   const [savedIdeas, setSavedIdeas] = useState([])
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeScript, setActiveScript] = useState(null)
   const [activeScriptIdea, setActiveScriptIdea] = useState(null)
   const [scriptLoadingKey, setScriptLoadingKey] = useState(null)
@@ -675,29 +679,43 @@ function App() {
         </div>
       )}
 
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
       <Sidebar
         chats={chats}
         currentChatId={currentChatId}
-        onSelectChat={handleSelectChat}
-        onNewChat={handleNewChat}
+        onSelectChat={(id) => { handleSelectChat(id); setSidebarOpen(false) }}
+        onNewChat={() => { handleNewChat(); setSidebarOpen(false) }}
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((d) => !d)}
         onLogout={handleLogout}
         usage={usage}
         onUpgrade={handleUpgrade}
         paymentLoading={paymentLoading}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       <main className="chat-main">
         <header className="chat-topbar">
+          <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
           <span className="chat-topbar-title">AI Ideas Studio</span>
 
           <div className="topbar-actions">
-            <select className="category-filter" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-              {CATEGORIES.map((category) => (
-                <option key={category} value={category}>{category}</option>
+            <div className="category-pills">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  className={`category-pill${filterCategory === cat ? ' active' : ''}`}
+                  onClick={() => setFilterCategory(cat)}
+                >
+                  {cat}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
         </header>
 
@@ -706,8 +724,20 @@ function App() {
         <div className="messages-area">
           {messages.length === 0 && (
             <div className="welcome-screen">
-              <h2 className="welcome-title">Generate structured idea cards</h2>
-              <p className="welcome-sub">Ask your topic. AI returns clean JSON cards with title, description, and category.</p>
+              <div className="welcome-icon">✦</div>
+              <h2 className="welcome-title">What idea should go viral?</h2>
+              <p className="welcome-sub">Ask any topic — AI returns structured idea cards with category, copy, save, and a ready-to-use video script.</p>
+              <div className="welcome-chips">
+                {['Funny pet videos', 'Budget cooking tips', 'Morning routine hacks', 'Tech life hacks'].map((prompt) => (
+                  <button
+                    key={prompt}
+                    className="welcome-chip"
+                    onClick={() => { setInput(prompt); setTimeout(() => inputRef.current?.focus(), 0) }}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
