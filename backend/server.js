@@ -11,6 +11,7 @@ import dotenv from "dotenv";
 import OpenAI from "openai";
 import mongoose from "mongoose";
 import Stripe from "stripe";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -36,6 +37,57 @@ const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
 const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const MONTHLY_PLAN_AMOUNT = 24900;
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+const RAZORPAY_MONTHLY_PLAN_AMOUNT = Number(process.env.RAZORPAY_MONTHLY_PLAN_AMOUNT || 24900);
+
+const buildRazorpayAuthHeader = () => {
+  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+    throw new Error("Razorpay is not configured");
+  }
+
+  return `Basic ${Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString("base64")}`;
+};
+
+const fetchRazorpayOrderAmount = async (orderId) => {
+  try {
+    const response = await fetch(`https://api.razorpay.com/v1/orders/${orderId}`, {
+      headers: {
+        Authorization: buildRazorpayAuthHeader(),
+      },
+    });
+
+    if (!response.ok) {
+      return RAZORPAY_MONTHLY_PLAN_AMOUNT;
+    }
+
+    const order = await response.json();
+    const amount = Number(order?.amount);
+    return Number.isFinite(amount) ? amount : RAZORPAY_MONTHLY_PLAN_AMOUNT;
+  } catch {
+    return RAZORPAY_MONTHLY_PLAN_AMOUNT;
+  }
+};
+
+const verifyRazorpaySignature = (orderId, paymentId, signature) => {
+  if (!RAZORPAY_KEY_SECRET) {
+    return false;
+  }
+
+  const generated = crypto
+    .createHmac("sha256", RAZORPAY_KEY_SECRET)
+    .update(`${orderId}|${paymentId}`)
+    .digest("hex");
+
+  const expectedBuffer = Buffer.from(generated, "utf8");
+  const receivedBuffer = Buffer.from(String(signature || ""), "utf8");
+
+  if (expectedBuffer.length !== receivedBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+};
 
 const ensureMonthlySubscriptionPrice = async () => {
   if (!stripe) {
@@ -638,9 +690,105 @@ const createSubscriptionHandler = async (req, res) => {
   }
 };
 
+const createRazorpayOrderHandler = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const response = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        Authorization: buildRazorpayAuthHeader(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: RAZORPAY_MONTHLY_PLAN_AMOUNT,
+        currency: "INR",
+        receipt: `premium_${user._id}_${Date.now()}`,
+        notes: {
+          userId: String(user._id),
+          plan: "premium",
+        },
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data?.id) {
+      return res.status(500).json({ error: data?.error?.description || "Could not create Razorpay order" });
+    }
+
+    return res.json({
+      orderId: data.id,
+      amount: data.amount,
+      currency: data.currency,
+      keyId: RAZORPAY_KEY_ID,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Could not create Razorpay order" });
+  }
+};
+
+const verifyRazorpayPaymentHandler = async (req, res) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: "razorpay_order_id, razorpay_payment_id, and razorpay_signature are required" });
+    }
+
+    const validSignature = verifyRazorpaySignature(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+    if (!validSignature) {
+      return res.status(400).json({ error: "Invalid payment signature" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const amount = await fetchRazorpayOrderAmount(razorpay_order_id);
+
+    await Payment.updateOne(
+      { paymentId: razorpay_payment_id },
+      {
+        $setOnInsert: {
+          userId: user._id,
+          paymentId: razorpay_payment_id,
+          orderId: razorpay_order_id,
+          amount,
+          currency: "inr",
+          status: "success",
+          plan: "premium",
+          description: "Razorpay premium upgrade",
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    user.plan = "premium";
+    await user.save();
+
+    const usage = await getUsageSnapshot(user);
+
+    return res.json({
+      success: true,
+      message: "Payment verified successfully",
+      plan: user.plan,
+      usage,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Failed to verify payment" });
+  }
+};
+
 app.post("/create-checkout-session", authMiddleware, createCheckoutSessionHandler);
 app.post("/billing/create-checkout-session", authMiddleware, createCheckoutSessionHandler);
 app.post("/create-subscription", authMiddleware, createSubscriptionHandler);
+app.post("/create-razorpay-order", authMiddleware, createRazorpayOrderHandler);
+app.post("/verify-payment", authMiddleware, verifyRazorpayPaymentHandler);
 
 app.post("/billing/cancel-subscription", authMiddleware, async (req, res) => {
   try {

@@ -778,6 +778,7 @@ function App() {
   const [usage, setUsage] = useState({ plan: 'free', usageCount: 0, remaining: 5, dailyLimit: 5 })
   const [showUpgradePopup, setShowUpgradePopup] = useState(false)
   const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentVerifying, setPaymentVerifying] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState('')
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
   const [cancelLoading, setCancelLoading] = useState(false)
@@ -1105,20 +1106,62 @@ function App() {
 
   const handleUpgrade = async () => {
     setPaymentLoading(true)
+    setPaymentSuccess('')
     try {
-      const res = await fetch(`${API_URL}/create-subscription`, {
+      const res = await fetch(`${API_URL}/create-razorpay-order`, {
         method: 'POST',
         headers: authHeaders(),
       })
+
       const data = await res.json()
       if (!res.ok) {
         alert(data.error || 'Could not start payment')
         return
       }
 
-      if (data.url) {
-        window.location.href = data.url
+      if (!window.Razorpay) {
+        alert('Razorpay SDK is not loaded')
+        return
       }
+
+      const razorpay = new window.Razorpay({
+        key: data.keyId,
+        amount: data.amount,
+        currency: data.currency || 'INR',
+        name: 'ViralAI',
+        description: 'Premium Plan Upgrade',
+        order_id: data.orderId,
+        handler: async (response) => {
+          setPaymentVerifying(true)
+          try {
+            const verifyRes = await fetch(`${API_URL}/verify-payment`, {
+              method: 'POST',
+              headers: authHeaders(),
+              body: JSON.stringify(response),
+            })
+
+            const verifyData = await verifyRes.json()
+            if (!verifyRes.ok || !verifyData.success) {
+              throw new Error(verifyData.error || 'Payment verification failed')
+            }
+
+            setUsage((prev) => ({ ...prev, ...(verifyData.usage || {}), plan: 'premium' }))
+            setPaymentSuccess('Payment successful! You are now Premium.')
+            await Promise.all([fetchUsage(), fetchProfile(), fetchBillingData()])
+            alert('Payment successful! You are now Premium 🎉')
+          } catch (err) {
+            alert(err.message || 'Payment received but verification failed')
+          } finally {
+            setPaymentVerifying(false)
+          }
+        },
+      })
+
+      razorpay.on('payment.failed', () => {
+        alert('Payment failed. Please try again.')
+      })
+
+      razorpay.open()
     } catch (err) {
       console.error('Upgrade error:', err)
       alert('Payment initialization failed')
@@ -1340,13 +1383,15 @@ function App() {
     return <AuthScreen onLogin={handleLogin} onSignup={handleSignup} />
   }
 
+  const paymentBusy = paymentLoading || paymentVerifying
+
   return (
     <div className={`app-shell ${darkMode ? 'dark' : 'light'}`}>
-      {paymentLoading && (
+      {paymentBusy && (
         <div className="payment-loader-overlay">
           <div className="payment-loader-card">
             <div className="spinner" />
-            <p>Processing payment...</p>
+            <p>{paymentVerifying ? 'Verifying payment...' : 'Processing payment...'}</p>
           </div>
         </div>
       )}
@@ -1366,7 +1411,7 @@ function App() {
         onLogout={handleLogout}
         usage={usage}
         onUpgrade={handleUpgrade}
-        paymentLoading={paymentLoading}
+        paymentLoading={paymentBusy}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
@@ -1416,7 +1461,7 @@ function App() {
             onUpgrade={handleUpgrade}
             onCancelSubscription={handleCancelSubscription}
             onLogout={handleLogout}
-            paymentLoading={paymentLoading}
+            paymentLoading={paymentBusy}
             cancelLoading={cancelLoading}
           />
         ) : activePage === 'pricing' ? (
@@ -1425,7 +1470,7 @@ function App() {
             billingStatus={profile?.billingStatus}
             currentPeriodEnd={profile?.currentPeriodEnd}
             onUpgrade={handleUpgrade}
-            paymentLoading={paymentLoading}
+            paymentLoading={paymentBusy}
           />
           ) : activePage === 'billing' ? (
             <BillingDashboard
@@ -1436,7 +1481,7 @@ function App() {
               onRefresh={fetchBillingData}
               onUpgrade={handleUpgrade}
               onCancelSubscription={handleCancelSubscription}
-              paymentLoading={paymentLoading}
+              paymentLoading={paymentBusy}
               cancelLoading={cancelLoading}
             />
         ) : (

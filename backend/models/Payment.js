@@ -20,6 +20,10 @@ const paymentSchema = new mongoose.Schema({
     required: true,
     unique: true, // Stripe payment_intent id — deduplicates duplicate webhook calls
   },
+  orderId: {
+    type: String,
+    default: "",
+  },
     plan: {
       type: String,
       enum: ["monthly", "yearly", "premium", "unknown"],
