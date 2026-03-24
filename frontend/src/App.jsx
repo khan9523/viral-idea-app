@@ -340,7 +340,7 @@ function AuthScreen({ onLogin, onSignup }) {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <button className="auth-submit" type="submit">
+          <button className={`auth-submit ${mode === 'login' ? 'auth-submit-login' : 'auth-submit-signup'}`} type="submit">
             {mode === 'login' ? 'Login' : 'Create account'}
           </button>
         </form>

@@ -207,17 +207,27 @@ body {
 .auth-submit {
   margin-top: 0.25rem;
   padding: 0.8rem;
-  background: var(--accent);
   color: #fff;
   border: none;
   border-radius: 8px;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s, transform 0.15s ease;
 }
 
-.auth-submit:hover { opacity: 0.9; }
+.auth-submit:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.auth-submit-login {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+.auth-submit-signup {
+  background: linear-gradient(135deg, #059669, #047857);
+}
 
 /* ============================================================
    App Shell — sidebar + main
