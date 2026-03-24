@@ -731,7 +731,8 @@ const createRazorpayOrderHandler = async (req, res) => {
       body: JSON.stringify({
         amount: monthlyAmount,
         currency: "INR",
-        receipt: `premium_${user._id}_${Date.now()}`,
+        // Razorpay receipt max length is 40 chars.
+        receipt: `p_${String(user._id).slice(-10)}_${Date.now().toString().slice(-10)}`,
         notes: {
           userId: String(user._id),
           plan: "premium",
