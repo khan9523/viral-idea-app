@@ -180,6 +180,43 @@ const generateIdeasJson = async (conversationMessages = []) => {
   return validateIdeas(parsed.ideas);
 };
 
+const generateConversational = async (conversationMessages = []) => {
+  const systemPrompt = `You are an expert content creator and assistant.
+
+Write like ChatGPT — natural, human, conversational.
+
+STRICT RULES:
+- Do NOT use bullet points
+- Do NOT use numbering
+- Do NOT use labels like "Idea 1"
+- Do NOT use templates or structured format
+- Do NOT use markdown
+- Do NOT sound robotic
+
+STYLE:
+- Write like you're talking to a friend
+- Smooth, flowing sentences
+- Engaging and simple
+
+OUTPUT:
+Generate 2–3 viral content ideas in natural paragraph form.
+
+FOLLOW-UP:
+At the end, ask 1–2 natural follow-up questions.
+
+Keep it human and conversational.`;
+
+  const completion = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...conversationMessages,
+    ],
+  });
+
+  return completion.choices?.[0]?.message?.content?.trim() || "Sorry, I couldn't generate ideas right now.";
+};
+
 const SCRIPT_JSON_SCHEMA = {
   name: "script_response",
   strict: true,
@@ -321,13 +358,11 @@ app.post("/chat/:id", authMiddleware, checkUsage, async (req, res) => {
 
     const conversationHistory = getConversationContext(chat.messages, 10);
 
-    const ideas = await generateIdeasJson(conversationHistory);
-    const assistantContent = JSON.stringify(ideas);
+    const responseText = await generateConversational(conversationHistory);
 
     chat.messages.push({
       role: "assistant",
-      content: assistantContent,
-      ideas,
+      content: responseText,
       createdAt: new Date(),
     });
 
@@ -337,7 +372,6 @@ app.post("/chat/:id", authMiddleware, checkUsage, async (req, res) => {
 
     res.json({
       chat,
-      ideas,
       usage,
     });
   } catch (err) {
