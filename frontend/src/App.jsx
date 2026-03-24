@@ -36,7 +36,7 @@ const formatMessageTime = (timestamp) => {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
-function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenProfile, activePage, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading, open, onClose }) {
+function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenProfile, onOpenPricing, onOpenBilling, activePage, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading, open, onClose }) {
   const used = usage?.usageCount ?? 0
   const limit = usage?.dailyLimit ?? 5
   const remaining = usage?.remaining ?? Math.max(0, limit - used)
@@ -96,6 +96,21 @@ function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenProfile,
           </svg>
           Profile
         </button>
+
+        <button className={`sidebar-profile-btn${activePage === 'pricing' ? ' active' : ''}`} title="Pricing" onClick={onOpenPricing}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="12" y1="1" x2="12" y2="23" />
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+          Pricing
+        </button>
+          <button className={`sidebar-profile-btn${activePage === 'billing' ? ' active' : ''}`} title="Billing" onClick={onOpenBilling}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="2" y="5" width="20" height="14" rx="2" />
+              <line x1="2" y1="10" x2="22" y2="10" />
+            </svg>
+            Billing
+          </button>
       </div>
 
       <div className="sidebar-section-label">Recent chats</div>
@@ -129,12 +144,17 @@ function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenProfile,
   )
 }
 
-function ProfilePage({ profile, profileLoading, profileError, onRefresh, onUpgrade, onLogout, paymentLoading }) {
+function ProfilePage({ profile, profileLoading, profileError, onRefresh, onUpgrade, onCancelSubscription, onLogout, paymentLoading, cancelLoading }) {
   const planLabel = profile?.plan === 'premium' ? 'Premium' : 'Free'
   const used = profile?.usageCount ?? 0
   const remaining = profile?.remainingUsage
   const isUnlimited = profile?.plan === 'premium' || (typeof remaining === 'number' && remaining < 0)
   const freeLimit = used + (typeof remaining === 'number' && remaining >= 0 ? remaining : 0)
+  const nextBillingDate = profile?.currentPeriodEnd
+    ? new Date(profile.currentPeriodEnd).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+    : '—'
+  const billingStatusLabel = profile?.billingStatus ? profile.billingStatus.replace('_', ' ') : 'inactive'
+  const hasSubscription = Boolean(profile?.subscriptionId)
 
   if (profileLoading) {
     return (
@@ -185,16 +205,23 @@ function ProfilePage({ profile, profileLoading, profileError, onRefresh, onUpgra
           <article className="profile-section">
             <h4>Plan Details</h4>
             <div className="profile-row"><span>Current plan</span><strong>{planLabel}</strong></div>
+            <div className="profile-row"><span>Billing status</span><strong className="profile-status-copy">{billingStatusLabel}</strong></div>
+            <div className="profile-row"><span>Next billing date</span><strong>{hasSubscription ? nextBillingDate : '—'}</strong></div>
             <p className="profile-plan-copy">
               {profile?.plan === 'premium'
-                ? 'Your account has unlimited generations.'
-                : 'Upgrade to premium for unlimited generations and no daily limit.'}
+                ? 'Your monthly premium subscription is active.'
+                : 'Start the monthly premium subscription for unlimited generations and no daily limit.'}
             </p>
 
             <div className="profile-actions">
               {profile?.plan !== 'premium' && (
                 <button className="upgrade-btn profile-upgrade" onClick={onUpgrade} disabled={paymentLoading}>
-                  {paymentLoading ? 'Redirecting...' : 'Upgrade to Premium'}
+                  {paymentLoading ? 'Redirecting...' : 'Start Monthly Plan'}
+                </button>
+              )}
+              {profile?.plan === 'premium' && hasSubscription && (
+                <button className="idea-action-btn profile-cancel-btn" onClick={onCancelSubscription} disabled={cancelLoading}>
+                  {cancelLoading ? 'Canceling...' : 'Cancel Subscription'}
                 </button>
               )}
               <button className="idea-action-btn" onClick={onLogout}>Logout</button>
@@ -203,6 +230,295 @@ function ProfilePage({ profile, profileLoading, profileError, onRefresh, onUpgra
           </article>
         </div>
       </section>
+    </div>
+  )
+}
+
+function BillingDashboard({ stats, history, loading, error, onRefresh, onUpgrade, onCancelSubscription, paymentLoading, cancelLoading }) {
+  const isPremium = stats?.plan === 'premium'
+  const used = stats?.usageCount ?? 0
+  const limit = stats?.dailyLimit ?? 5
+  const remaining = stats?.remaining ?? 0
+  const progressPercent = isPremium ? 100 : Math.min(100, Math.round((used / limit) * 100))
+  const totalSpentRaw = stats?.totalSpent ?? 0
+  // Convert from smallest unit (paise) to readable rupees
+  const totalSpentDisplay = totalSpentRaw > 0
+    ? `₹${(totalSpentRaw / 100).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`
+    : '₹0'
+
+  const memberSince = stats?.memberSince
+    ? new Date(stats.memberSince).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })
+    : '—'
+  const nextBillingDate = stats?.currentPeriodEnd
+    ? new Date(stats.currentPeriodEnd).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+    : '—'
+  const billingStatus = stats?.billingStatus ? stats.billingStatus.replace('_', ' ') : 'inactive'
+  const hasSubscription = Boolean(stats?.subscriptionId)
+
+  const formatAmount = (amt, currency) => {
+    if (!amt) return '—'
+    const sym = (currency || 'inr').toLowerCase() === 'inr' ? '₹' : '$'
+    return `${sym}${(amt / 100).toLocaleString('en-IN', { minimumFractionDigits: 0 })}`
+  }
+
+  const formatDate = (d) => {
+    if (!d) return '—'
+    return new Date(d).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+  }
+
+  if (loading) {
+    return (
+      <div className="billing-wrap">
+        <div className="billing-loading">
+          <div className="spinner" />
+          <p>Loading billing info...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="billing-wrap">
+        <div className="billing-error-card">
+          <p className="profile-error">{error}</p>
+          <button className="idea-action-btn" onClick={onRefresh}>Try again</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="billing-wrap">
+      {/* Page header */}
+      <div className="billing-page-header">
+        <div>
+          <h2 className="billing-title">Billing &amp; Usage</h2>
+          <p className="billing-sub">Manage your plan and view payment history</p>
+        </div>
+        <button className="idea-action-btn" onClick={onRefresh}>Refresh</button>
+      </div>
+
+      {/* Stats row */}
+      <div className="billing-stats-row">
+        <div className="billing-stat-card">
+          <span className="billing-stat-label">Plan Type</span>
+          <span className={`plan-badge ${isPremium ? 'premium' : 'free'} billing-plan-badge`}>
+            {isPremium ? 'Premium Monthly' : 'Free'}
+          </span>
+          <span className="billing-stat-hint">Member since {memberSince}</span>
+        </div>
+
+        <div className="billing-stat-card">
+          <span className="billing-stat-label">Billing Status</span>
+          <span className={`billing-status billing-status--${stats?.billingStatus || 'pending'}`}>{billingStatus}</span>
+          <span className="billing-stat-hint">Next billing: {hasSubscription ? nextBillingDate : '—'}</span>
+        </div>
+
+        <div className="billing-stat-card">
+          <span className="billing-stat-label">Today&apos;s Usage</span>
+          <span className="billing-stat-value">{used} <span className="billing-stat-dim">/ {isPremium ? '∞' : limit}</span></span>
+          {!isPremium && (
+            <div className="usage-progress billing-usage-bar" aria-label="Usage progress">
+              <div className="usage-progress-fill" style={{ width: `${progressPercent}%` }} />
+            </div>
+          )}
+          <span className="billing-stat-hint">
+            {isPremium ? 'Unlimited requests' : `${remaining} remaining today`}
+          </span>
+        </div>
+
+        <div className="billing-stat-card">
+          <span className="billing-stat-label">Total Payments</span>
+          <span className="billing-stat-value">{stats?.totalPayments ?? 0}</span>
+          <span className="billing-stat-hint">Total spent: {totalSpentDisplay}</span>
+        </div>
+      </div>
+
+      {/* Upgrade CTA for free users */}
+      {!isPremium && (
+        <div className="billing-upgrade-banner">
+          <div>
+            <strong>Upgrade to Premium</strong>
+            <p>Get unlimited generations, script generation, and priority response.</p>
+          </div>
+          <button className="upgrade-btn billing-upgrade-btn" onClick={onUpgrade} disabled={paymentLoading}>
+            {paymentLoading ? 'Redirecting...' : 'Start Monthly Plan'}
+          </button>
+        </div>
+      )}
+
+      {isPremium && hasSubscription && (
+        <div className="billing-action-row">
+          <button className="idea-action-btn billing-cancel-btn" onClick={onCancelSubscription} disabled={cancelLoading}>
+            {cancelLoading ? 'Canceling...' : 'Cancel Subscription'}
+          </button>
+        </div>
+      )}
+
+      {/* Payment history */}
+      <div className="billing-history-section">
+        <h3 className="billing-section-title">Payment History</h3>
+
+        {(!history || history.length === 0) ? (
+          <div className="billing-empty">
+            <span className="billing-empty-icon">🧾</span>
+            <p>No payment history yet.</p>
+            {!isPremium && <p className="billing-empty-hint">Upgrade to Premium to start your billing history.</p>}
+          </div>
+        ) : (
+          <div className="billing-table-wrap">
+            <table className="billing-table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Plan</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.map((p) => (
+                  <tr key={p._id || p.paymentId}>
+                    <td>{formatDate(p.createdAt)}</td>
+                    <td className="billing-plan-cell">
+                      <span className="billing-plan-pill">
+                        {p.plan === 'yearly' ? 'Yearly' : p.plan === 'monthly' ? 'Monthly' : 'Premium'}
+                      </span>
+                    </td>
+                    <td className="billing-amount-cell">{formatAmount(p.amount, p.currency)}</td>
+                    <td>
+                      <span className={`billing-status billing-status--${p.status}`}>{p.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PricingPage({ plan, billingStatus, currentPeriodEnd, onUpgrade, paymentLoading }) {
+  const [billing, setBilling] = useState('monthly')
+  const isPremium = plan === 'premium'
+  const nextBillingDate = currentPeriodEnd
+    ? new Date(currentPeriodEnd).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })
+    : null
+
+  const PLANS = [
+    {
+      id: 'free',
+      name: 'Free',
+      amount: '₹0',
+      period: '/month',
+      equiv: null,
+      badge: null,
+      features: ['5 generations/day', 'Basic idea generation', 'Category filtering', 'Copy & save ideas'],
+    },
+    {
+      id: 'monthly',
+      name: 'Monthly',
+      amount: '₹249',
+      period: '/month',
+      equiv: null,
+      badge: null,
+      features: ['Unlimited generations', 'Script generation', 'Priority response', 'All Free features'],
+    },
+    {
+      id: 'yearly',
+      name: 'Yearly',
+      amount: '₹1,999',
+      period: '/year',
+      equiv: '≈ ₹167/month',
+      badge: '🔥 Best Value',
+      features: ['Unlimited generations', 'Script generation', 'Priority response', 'All Free features', 'Lowest price per month'],
+    },
+  ]
+
+  return (
+    <div className="pricing-wrap">
+      <div className="pricing-header">
+        <h2 className="pricing-title">Simple, transparent pricing</h2>
+        <p className="pricing-sub">Start free. Upgrade to the monthly premium subscription when you&apos;re ready.</p>
+
+        {isPremium && (
+          <div className="pricing-subscription-note">
+            <span className={`billing-status billing-status--${billingStatus || 'active'}`}>{(billingStatus || 'active').replace('_', ' ')}</span>
+            <span>{nextBillingDate ? `Next billing date: ${nextBillingDate}` : 'Subscription active'}</span>
+          </div>
+        )}
+
+        <div className="billing-toggle">
+          <button
+            className={`billing-opt${billing === 'monthly' ? ' billing-opt--active' : ''}`}
+            onClick={() => setBilling('monthly')}
+          >
+            Monthly
+          </button>
+          <button
+            className={`billing-opt${billing === 'yearly' ? ' billing-opt--active' : ''}`}
+            onClick={() => setBilling('yearly')}
+            disabled
+          >
+            Yearly <span className="billing-save">Soon</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="pricing-grid">
+        {PLANS.map((p) => {
+          const isHighlight = p.id === 'yearly' && billing === 'yearly'
+          const isCurrent = p.id === 'free' ? !isPremium : (isPremium && p.id === 'monthly')
+          const isHidden = (p.id === 'monthly' && billing === 'yearly') || (p.id === 'yearly' && billing === 'monthly')
+
+          if (isHidden) return null
+
+          return (
+            <div
+              key={p.id}
+              className={`pc${isHighlight ? ' pc--highlight' : ''}${p.id === 'free' ? ' pc--free' : ''}`}
+            >
+              {p.badge && <span className="pc-badge">{p.badge}</span>}
+
+              <div className="pc-top">
+                <span className="pc-name">{p.name}</span>
+                <div className="pc-price-row">
+                  <span className="pc-amount">{p.amount}</span>
+                  <span className="pc-period">{p.period}</span>
+                </div>
+                {p.equiv && <span className="pc-equiv">{p.equiv}</span>}
+              </div>
+
+              <ul className="pc-features">
+                {p.features.map((f) => (
+                  <li key={f}>
+                    <span className="pc-check">✓</span> {f}
+                  </li>
+                ))}
+              </ul>
+
+              <button
+                className={`pc-btn${isCurrent ? ' pc-btn--current' : ' pc-btn--upgrade'}`}
+                onClick={p.id === 'monthly' && !isCurrent ? onUpgrade : undefined}
+                disabled={isCurrent || p.id === 'yearly' || (p.id !== 'free' && paymentLoading)}
+              >
+                {isCurrent
+                  ? 'Current Plan'
+                  : p.id === 'free'
+                  ? 'Free Plan'
+                  : paymentLoading
+                  ? 'Redirecting...'
+                  : p.id === 'yearly'
+                  ? 'Coming Soon'
+                  : 'Start Monthly Plan'}
+              </button>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -416,6 +732,31 @@ function ScriptModal({ script, idea, open, onClose, onCopy, copied }) {
   )
 }
 
+function PaymentSuccessModal({ open, onClose }) {
+  if (!open) return null
+
+  return (
+    <div className="pay-success-overlay" onClick={onClose}>
+      <div className="pay-success-card" onClick={(e) => e.stopPropagation()}>
+        <div className="pay-success-icon" aria-hidden="true">🎉</div>
+        <h2 className="pay-success-title">You are now Premium!</h2>
+        <p className="pay-success-sub">
+          Your premium plan is now active.<br />Enjoy unlimited generations every day.
+        </p>
+        <span className="plan-badge premium pay-success-badge">Premium</span>
+        <div className="pay-success-features">
+          <span>✓ Unlimited generations</span>
+          <span>✓ Script generation</span>
+          <span>✓ Priority response</span>
+        </div>
+        <button className="pay-success-btn" onClick={onClose}>
+          Go to Dashboard →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [activePage, setActivePage] = useState('chat')
   const [currentChatId, setCurrentChatId] = useState(null)
@@ -437,12 +778,19 @@ function App() {
   const [showUpgradePopup, setShowUpgradePopup] = useState(false)
   const [paymentLoading, setPaymentLoading] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState('')
+  const [showPaymentSuccess, setShowPaymentSuccess] = useState(false)
+  const [cancelLoading, setCancelLoading] = useState(false)
 
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileError, setProfileError] = useState('')
+
+  const [billingStats, setBillingStats] = useState(null)
+  const [billingHistory, setBillingHistory] = useState([])
+  const [billingLoading, setBillingLoading] = useState(false)
+  const [billingError, setBillingError] = useState('')
 
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
@@ -478,6 +826,7 @@ function App() {
       setIsLoggedIn(true)
       fetchChats()
       fetchUsage()
+      fetchProfile()
     }
     setCheckingAuth(false)
   }, [])
@@ -546,6 +895,40 @@ function App() {
       setProfileError(err.message || 'Could not load profile')
     } finally {
       setProfileLoading(false)
+    }
+  }
+
+  const fetchBillingData = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    setBillingLoading(true)
+    setBillingError('')
+    try {
+      const [statsRes, historyRes] = await Promise.all([
+        fetch(`${API_URL}/billing/stats`, { headers: { Authorization: 'Bearer ' + token } }),
+        fetch(`${API_URL}/billing/history`, { headers: { Authorization: 'Bearer ' + token } }),
+      ])
+
+      const statsData = await statsRes.json()
+      const historyData = historyRes.ok ? await historyRes.json() : { payments: [] }
+
+      if (!statsRes.ok) {
+        throw new Error(statsData.error || 'Failed to load billing data')
+      }
+
+      setBillingStats(statsData)
+      setBillingHistory(historyData.payments || [])
+      setUsage({
+        plan: statsData.plan,
+        usageCount: statsData.usageCount,
+        remaining: statsData.remaining,
+        dailyLimit: statsData.dailyLimit,
+      })
+    } catch (err) {
+      setBillingError(err.message || 'Failed to load billing data')
+    } finally {
+      setBillingLoading(false)
     }
   }
 
@@ -635,6 +1018,7 @@ function App() {
         setIsLoggedIn(true)
         fetchChats()
         fetchUsage()
+        fetchProfile()
       } else {
         alert(data.error || 'Login failed')
       }
@@ -678,7 +1062,7 @@ function App() {
   const confirmPremiumAfterCheckout = async () => {
     setPaymentLoading(true)
     try {
-      // Webhook may take a moment after redirect, so retry usage checks briefly.
+      // Webhook may take a moment after redirect — retry usage checks briefly.
       let premiumActivated = false
       const maxAttempts = 8
 
@@ -701,7 +1085,8 @@ function App() {
       }
 
       if (premiumActivated) {
-        setPaymentSuccess('Payment successful. You are now Premium.')
+        setShowPaymentSuccess(true)
+        await Promise.all([fetchProfile(), fetchBillingData()])
       } else {
         setPaymentSuccess('Payment received. Premium activation may take a minute.')
       }
@@ -712,10 +1097,15 @@ function App() {
     }
   }
 
+  const handlePaymentSuccessDismiss = () => {
+    setShowPaymentSuccess(false)
+    setActivePage('billing')
+  }
+
   const handleUpgrade = async () => {
     setPaymentLoading(true)
     try {
-      const res = await fetch(`${API_URL}/create-checkout-session`, {
+      const res = await fetch(`${API_URL}/create-subscription`, {
         method: 'POST',
         headers: authHeaders(),
       })
@@ -733,6 +1123,31 @@ function App() {
       alert('Payment initialization failed')
     } finally {
       setPaymentLoading(false)
+    }
+  }
+
+  const handleCancelSubscription = async () => {
+    const confirmed = window.confirm('Cancel your monthly subscription and return to the Free plan?')
+    if (!confirmed) return
+
+    setCancelLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/billing/cancel-subscription`, {
+        method: 'POST',
+        headers: authHeaders(),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to cancel subscription')
+      }
+
+      setPaymentSuccess('Subscription canceled. Your account is now on the Free plan.')
+      await Promise.all([fetchUsage(), fetchProfile(), fetchBillingData()])
+    } catch (err) {
+      alert(err.message || 'Failed to cancel subscription')
+    } finally {
+      setCancelLoading(false)
     }
   }
 
@@ -859,6 +1274,16 @@ function App() {
     await fetchProfile()
   }
 
+  const handleOpenPricing = async () => {
+    setActivePage('pricing')
+    await fetchProfile()
+  }
+
+  const handleOpenBilling = async () => {
+    setActivePage('billing')
+    await fetchBillingData()
+  }
+
   if (checkingAuth) {
     return (
       <div className="splash">
@@ -889,7 +1314,9 @@ function App() {
         onSelectChat={(id) => { handleSelectChat(id); setSidebarOpen(false) }}
         onNewChat={() => { handleNewChat(); setSidebarOpen(false) }}
         onOpenProfile={() => { handleOpenProfile(); setSidebarOpen(false) }}
+        onOpenPricing={() => { handleOpenPricing(); setSidebarOpen(false) }}
         activePage={activePage}
+          onOpenBilling={() => { handleOpenBilling(); setSidebarOpen(false) }}
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((d) => !d)}
         onLogout={handleLogout}
@@ -907,10 +1334,12 @@ function App() {
               <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <span className="chat-topbar-title">{activePage === 'profile' ? 'Profile' : 'AI Ideas Studio'}</span>
+          <span className="chat-topbar-title">{activePage === 'profile' ? 'Profile' : activePage === 'pricing' ? 'Pricing' : activePage === 'billing' ? 'Billing & Usage' : 'AI Ideas Studio'}</span>
 
           <div className="topbar-actions">
             <button className="topbar-profile-btn" onClick={handleOpenProfile}>Profile</button>
+            <button className="topbar-profile-btn" onClick={handleOpenPricing}>Pricing</button>
+            <button className="topbar-profile-btn" onClick={handleOpenBilling}>Billing</button>
             {activePage === 'chat' && (
               <>
                 <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
@@ -941,9 +1370,31 @@ function App() {
             profileError={profileError}
             onRefresh={fetchProfile}
             onUpgrade={handleUpgrade}
+            onCancelSubscription={handleCancelSubscription}
             onLogout={handleLogout}
             paymentLoading={paymentLoading}
+            cancelLoading={cancelLoading}
           />
+        ) : activePage === 'pricing' ? (
+          <PricingPage
+            plan={usage?.plan ?? 'free'}
+            billingStatus={profile?.billingStatus}
+            currentPeriodEnd={profile?.currentPeriodEnd}
+            onUpgrade={handleUpgrade}
+            paymentLoading={paymentLoading}
+          />
+          ) : activePage === 'billing' ? (
+            <BillingDashboard
+              stats={billingStats}
+              history={billingHistory}
+              loading={billingLoading}
+              error={billingError}
+              onRefresh={fetchBillingData}
+              onUpgrade={handleUpgrade}
+              onCancelSubscription={handleCancelSubscription}
+              paymentLoading={paymentLoading}
+              cancelLoading={cancelLoading}
+            />
         ) : (
         <div className="messages-area">
           {messages.length === 0 && (
@@ -1031,6 +1482,11 @@ function App() {
         onClose={() => { setActiveScript(null); setActiveScriptIdea(null) }}
         onCopy={handleCopyScript}
         copied={scriptCopied}
+      />
+
+      <PaymentSuccessModal
+        open={showPaymentSuccess}
+        onClose={handlePaymentSuccessDismiss}
       />
     </div>
   )

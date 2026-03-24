@@ -15,6 +15,19 @@ const userSchema = new mongoose.Schema({
     enum: ["free", "premium"],
     default: "free"
   },
+  subscriptionId: {
+    type: String,
+    default: null
+  },
+  currentPeriodEnd: {
+    type: Date,
+    default: null
+  },
+  billingStatus: {
+    type: String,
+    enum: ["inactive", "active", "canceled", "past_due"],
+    default: "inactive"
+  },
   usageCount: {
     type: Number,
     default: 0

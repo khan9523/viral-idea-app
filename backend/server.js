@@ -4,6 +4,7 @@ import { checkUsage, consumeUsage, getUsageSnapshot, resetUsageIfNeeded } from "
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "./models/User.js";
+import Payment from "./models/Payment.js";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -22,7 +23,7 @@ const app = express();
 app.use(cors());
 
 // Stripe webhook requires raw body to validate signature.
-app.use("/stripe/webhook", express.raw({ type: "application/json" }));
+app.use(["/stripe/webhook", "/webhook"], express.raw({ type: "application/json" }));
 app.use(express.json());
 
 const client = new OpenAI({
@@ -32,7 +33,56 @@ const client = new OpenAI({
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
+const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+const MONTHLY_PLAN_AMOUNT = 24900;
+
+const ensureMonthlySubscriptionPrice = async () => {
+  if (!stripe) {
+    throw new Error("Stripe is not configured");
+  }
+
+  if (STRIPE_MONTHLY_PRICE_ID) {
+    return STRIPE_MONTHLY_PRICE_ID;
+  }
+
+  const prices = await stripe.prices.list({ active: true, limit: 100 });
+  const existingPrice = prices.data.find((price) => (
+    price.currency === "inr"
+    && price.unit_amount === MONTHLY_PLAN_AMOUNT
+    && price.recurring?.interval === "month"
+    && price.metadata?.internalKey === "premium-monthly"
+  ));
+
+  if (existingPrice) {
+    return existingPrice.id;
+  }
+
+  const products = await stripe.products.list({ active: true, limit: 100 });
+  let product = products.data.find((item) => item.metadata?.internalKey === "premium-monthly");
+
+  if (!product) {
+    product = await stripe.products.create({
+      name: "ViralAI Premium Monthly",
+      description: "Monthly premium subscription for unlimited generations.",
+      metadata: {
+        internalKey: "premium-monthly",
+      },
+    });
+  }
+
+  const price = await stripe.prices.create({
+    product: product.id,
+    currency: "inr",
+    unit_amount: MONTHLY_PLAN_AMOUNT,
+    recurring: { interval: "month" },
+    metadata: {
+      internalKey: "premium-monthly",
+    },
+  });
+
+  return price.id;
+};
 
 const SYSTEM_PROMPT = `You are a helpful AI assistant for viral content ideas.
 Return ONLY valid JSON.
@@ -213,7 +263,7 @@ app.post("/chat", authMiddleware, async (req, res) => {
 
 app.get("/chats", authMiddleware, async (req, res) => {
   try {
-    const chats = await Chat.find({ userId: req.user.id })
+    const chats = await Chat.find({ userId: req.user.id, "messages.0": { $exists: true } })
       .sort({ createdAt: -1 })
       .select("_id title createdAt messages");
 
@@ -400,7 +450,7 @@ app.get("/usage", authMiddleware, async (req, res) => {
 
 app.get("/profile", authMiddleware, async (req, res) => {
   try {
-    const dbUser = await User.findById(req.user.id).select("email plan usageCount lastReset");
+    const dbUser = await User.findById(req.user.id).select("email plan usageCount lastReset subscriptionId currentPeriodEnd billingStatus");
 
     if (!dbUser) {
       return res.status(404).json({ error: "User not found" });
@@ -412,6 +462,9 @@ app.get("/profile", authMiddleware, async (req, res) => {
     res.json({
       email: dbUser.email,
       plan: dbUser.plan,
+      billingStatus: dbUser.billingStatus,
+      subscriptionId: dbUser.subscriptionId,
+      currentPeriodEnd: dbUser.currentPeriodEnd,
       usageCount: usage.usageCount,
       remainingUsage: usage.remaining ?? -1,
     });
@@ -449,10 +502,85 @@ const createCheckoutSessionHandler = async (req, res) => {
   }
 };
 
+const createSubscriptionHandler = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!stripe) {
+      return res.status(500).json({ error: "Stripe is not configured" });
+    }
+
+    if (user.subscriptionId && user.plan === "premium") {
+      return res.status(400).json({ error: "An active subscription already exists" });
+    }
+
+    const monthlyPriceId = await ensureMonthlySubscriptionPrice();
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      line_items: [{ price: monthlyPriceId, quantity: 1 }],
+      success_url: `${FRONTEND_URL}?payment=success`,
+      cancel_url: `${FRONTEND_URL}?payment=cancelled`,
+      customer_email: user.email,
+      client_reference_id: String(user._id),
+      metadata: {
+        userId: String(user._id),
+        plan: "monthly",
+        description: "Premium monthly subscription",
+      },
+      subscription_data: {
+        metadata: {
+          userId: String(user._id),
+          plan: "monthly",
+        },
+      },
+    });
+
+    user.billingStatus = "inactive";
+    await user.save();
+
+    res.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 app.post("/create-checkout-session", authMiddleware, createCheckoutSessionHandler);
 app.post("/billing/create-checkout-session", authMiddleware, createCheckoutSessionHandler);
+app.post("/create-subscription", authMiddleware, createSubscriptionHandler);
 
-app.post("/stripe/webhook", async (req, res) => {
+app.post("/billing/cancel-subscription", authMiddleware, async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ error: "Stripe is not configured" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    if (!user.subscriptionId) {
+      return res.status(400).json({ error: "No active subscription found" });
+    }
+
+    await stripe.subscriptions.cancel(user.subscriptionId);
+
+    user.plan = "free";
+    user.subscriptionId = null;
+    user.currentPeriodEnd = null;
+    user.billingStatus = "canceled";
+    await user.save();
+
+    res.json({ message: "Subscription canceled", plan: user.plan, billingStatus: user.billingStatus });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const handleStripeWebhook = async (req, res) => {
   try {
     if (!stripe || !STRIPE_WEBHOOK_SECRET) {
       return res.status(500).json({ error: "Stripe webhook is not configured" });
@@ -476,10 +604,94 @@ app.post("/stripe/webhook", async (req, res) => {
 
       if (userId) {
         const user = await User.findById(userId);
-        if (user) {
+        if (user && session.mode === "subscription") {
+          user.subscriptionId = session.subscription || null;
+          user.billingStatus = "inactive";
+          await user.save();
+        }
+
+        if (user && session.mode !== "subscription" && user.plan !== "premium") {
           user.plan = "premium";
           await user.save();
         }
+
+        if (user && session.mode !== "subscription") {
+          // Persist payment record — idempotent via unique paymentId
+          const paymentId = session.payment_intent || session.id;
+          const purchasedPlan = session.metadata?.plan || "premium";
+          await Payment.findOneAndUpdate(
+            { paymentId },
+            {
+              userId: user._id,
+              amount: session.amount_total ?? 0,
+              currency: session.currency ?? "inr",
+              paymentId,
+              plan: purchasedPlan,
+              description: session.metadata?.description || "Premium plan upgrade",
+              status: "success",
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+        }
+      }
+    }
+
+    if (event.type === "invoice.paid") {
+      const invoice = event.data.object;
+      const subscriptionId = typeof invoice.subscription === "string"
+        ? invoice.subscription
+        : invoice.subscription?.id;
+
+      let userId = invoice.parent?.subscription_details?.metadata?.userId || invoice.lines?.data?.[0]?.metadata?.userId;
+
+      const subscription = subscriptionId ? await stripe.subscriptions.retrieve(subscriptionId) : null;
+      if (!userId && subscription) {
+        userId = subscription.metadata?.userId;
+      }
+
+      if (userId) {
+        const user = await User.findById(userId);
+        if (user) {
+          user.plan = "premium";
+          user.subscriptionId = subscription?.id || user.subscriptionId;
+          user.currentPeriodEnd = subscription?.current_period_end
+            ? new Date(subscription.current_period_end * 1000)
+            : user.currentPeriodEnd;
+          user.billingStatus = subscription?.status === "active"
+            ? "active"
+            : subscription?.status === "past_due"
+            ? "past_due"
+            : "inactive";
+          await user.save();
+
+          const paymentId = invoice.payment_intent || invoice.id;
+          await Payment.findOneAndUpdate(
+            { paymentId },
+            {
+              userId: user._id,
+              amount: invoice.amount_paid ?? invoice.amount_due ?? 0,
+              currency: invoice.currency ?? "inr",
+              paymentId,
+              plan: "monthly",
+              description: "Premium monthly subscription",
+              status: "success",
+            },
+            { upsert: true, new: true, setDefaultsOnInsert: true }
+          );
+        }
+      }
+    }
+
+    if (event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object;
+      const user = await User.findOne({ subscriptionId: subscription.id });
+
+      if (user) {
+        user.plan = "free";
+        user.subscriptionId = null;
+        user.currentPeriodEnd = null;
+        user.billingStatus = "canceled";
+        await user.save();
       }
     }
 
@@ -487,7 +699,10 @@ app.post("/stripe/webhook", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+};
+
+app.post("/stripe/webhook", handleStripeWebhook);
+app.post("/webhook", handleStripeWebhook);
 
 app.post("/billing/verify-session", authMiddleware, async (req, res) => {
   try {
@@ -520,6 +735,55 @@ app.post("/billing/verify-session", authMiddleware, async (req, res) => {
     await user.save();
 
     res.json({ message: "Upgraded to premium", plan: user.plan });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /billing/history — returns the authenticated user's payment history
+app.get("/billing/history", authMiddleware, async (req, res) => {
+  try {
+    const payments = await Payment.find({ userId: req.user.id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+
+    res.json({ payments });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /billing/stats — summary stats for the billing dashboard
+app.get("/billing/stats", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    await resetUsageIfNeeded(user);
+
+    const [payments] = await Promise.all([
+      Payment.find({ userId: req.user.id, status: "success" }).lean(),
+    ]);
+    const usageSnap = getUsageSnapshot(user);
+
+    const totalSpent = payments.reduce((sum, p) => sum + (p.amount ?? 0), 0);
+    const totalPayments = payments.length;
+    const sortedPayments = [...payments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({
+      plan: user.plan,
+      billingStatus: user.billingStatus,
+      subscriptionId: user.subscriptionId,
+      currentPeriodEnd: user.currentPeriodEnd,
+      usageCount: usageSnap.usageCount,
+      dailyLimit: usageSnap.dailyLimit,
+      remaining: usageSnap.remaining,
+      totalSpent,          // smallest currency unit
+      totalPayments,
+      lastPaymentAt: sortedPayments[0]?.createdAt ?? null,
+      memberSince: user._id.getTimestamp(),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
