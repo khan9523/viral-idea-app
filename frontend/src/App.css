@@ -281,6 +281,31 @@ body {
   background: var(--chat-hover);
 }
 
+.sidebar-profile-btn {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.66rem 0.7rem;
+  background: transparent;
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  margin-top: 0.5rem;
+  transition: background 0.16s ease;
+}
+
+.sidebar-profile-btn:hover {
+  background: var(--chat-hover);
+}
+
+.sidebar-profile-btn.active {
+  background: var(--chat-active);
+}
+
 .sidebar-section-label {
   padding: 0.85rem 1rem 0.4rem;
   font-size: 0.72rem;
@@ -540,6 +565,21 @@ body {
   white-space: pre-wrap;
 }
 
+.message-time {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1;
+  opacity: 0.72;
+}
+
+.user-bubble .message-time {
+  color: color-mix(in oklab, var(--text-user-bubble) 84%, transparent);
+}
+
+.assistant-bubble .message-time {
+  color: var(--text-secondary);
+}
+
 /* ── Copy button ── */
 .copy-btn {
   display: inline-flex;
@@ -733,7 +773,8 @@ body {
 
   .hamburger-btn { display: flex; }
   .sidebar-close-btn { display: flex; align-items: center; }
-  .topbar-actions { display: none; }
+  .topbar-actions { display: flex; margin-left: auto; }
+  .category-pills { display: none; }
 
   .chat-topbar {
     height: 48px;
@@ -747,6 +788,14 @@ body {
   .message-row { max-width: 100%; }
 
   .input-bar { padding: 0.5rem 0.5rem 0.4rem; }
+
+  .profile-wrap {
+    padding: 0.8rem;
+  }
+
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .plan-card {
@@ -783,6 +832,31 @@ body {
   color: var(--text-secondary);
 }
 
+.usage-remaining {
+  margin-top: 0.2rem;
+}
+
+.usage-warning {
+  margin-top: 0.35rem;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.usage-progress {
+  margin-top: 0.6rem;
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--border) 86%, transparent);
+  overflow: hidden;
+}
+
+.usage-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2563eb, #22c55e);
+  transition: width 0.25s ease;
+}
+
 .upgrade-btn {
   margin-top: 0.55rem;
   width: 100%;
@@ -809,6 +883,151 @@ body {
 
 .topbar-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.clear-chat-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.clear-chat-btn:hover:not(:disabled) {
+  background: var(--chat-hover);
+  color: var(--text-primary);
+}
+
+.clear-chat-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.topbar-profile-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.topbar-profile-btn:hover {
+  background: var(--chat-hover);
+  color: var(--text-primary);
+}
+
+.profile-wrap {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem;
+  display: flex;
+  justify-content: center;
+}
+
+.profile-card {
+  width: min(880px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--bg-main) 90%, black 10%);
+  box-shadow: var(--shadow);
+  padding: 1rem;
+  height: fit-content;
+}
+
+.profile-loading-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  min-height: 200px;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.profile-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.profile-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--bg-sidebar) 74%, transparent);
+  padding: 0.85rem;
+}
+
+.profile-section h4 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.7rem;
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.84rem;
+}
+
+.profile-row span {
+  color: var(--text-secondary);
+}
+
+.profile-row strong {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-align: right;
+}
+
+.profile-plan-copy {
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.profile-actions {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.profile-upgrade {
+  width: auto;
+  margin-top: 0;
+  padding-inline: 0.8rem;
+}
+
+.profile-error {
+  margin: 0.5rem 0 0.8rem;
+  color: #ef4444;
+  font-size: 0.88rem;
 }
 
 .category-pills {

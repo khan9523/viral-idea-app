@@ -1,6 +1,6 @@
 import Chat from "./models/Chat.js";
 import { authMiddleware } from "./middleware/auth.js";
-import { checkUsageLimit, consumeUsage, getUsageSnapshot, resetUsageIfNeeded } from "./middleware/usage.js";
+import { checkUsage, consumeUsage, getUsageSnapshot, resetUsageIfNeeded } from "./middleware/usage.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "./models/User.js";
@@ -20,6 +20,9 @@ mongoose.connect(process.env.MONGO_URI)
 
 const app = express();
 app.use(cors());
+
+// Stripe webhook requires raw body to validate signature.
+app.use("/stripe/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 
 const client = new OpenAI({
@@ -29,8 +32,9 @@ const client = new OpenAI({
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
-const SYSTEM_PROMPT = `You are an AI assistant for viral content ideas.
+const SYSTEM_PROMPT = `You are a helpful AI assistant for viral content ideas.
 Return ONLY valid JSON.
 Do not include markdown, code fences, comments, headings, or extra text.
 Use category values strictly from: Funny, Educational, Viral.`;
@@ -90,7 +94,18 @@ const validateIdeas = (ideas) => {
   });
 };
 
-const generateIdeasJson = async (userPrompt, conversationMessages = []) => {
+const getConversationContext = (messages = [], limit = 10) => {
+  return messages
+    .filter((msg) => msg?.role === "user" || msg?.role === "assistant")
+    .map((msg) => ({
+      role: msg.role,
+      content: String(msg.content || ""),
+    }))
+    .filter((msg) => msg.content.trim())
+    .slice(-limit);
+};
+
+const generateIdeasJson = async (conversationMessages = []) => {
   const completion = await client.chat.completions.create({
     model: "gpt-4o-mini",
     response_format: {
@@ -100,7 +115,6 @@ const generateIdeasJson = async (userPrompt, conversationMessages = []) => {
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       ...conversationMessages,
-      { role: "user", content: `Generate idea cards for: ${userPrompt}` },
     ],
   });
 
@@ -232,7 +246,7 @@ app.get("/chat/:id", authMiddleware, async (req, res) => {
   }
 });
 
-app.post("/chat/:id", authMiddleware, checkUsageLimit, async (req, res) => {
+app.post("/chat/:id", authMiddleware, checkUsage, async (req, res) => {
   try {
     const { message } = req.body;
 
@@ -246,26 +260,25 @@ app.post("/chat/:id", authMiddleware, checkUsageLimit, async (req, res) => {
       return res.status(404).json({ error: "Chat not found" });
     }
 
-    const userMessage = { role: "user", content: message.trim() };
+    const userMessage = { role: "user", content: message.trim(), createdAt: new Date() };
 
     if (chat.messages.length === 0) {
       chat.title = makeTitleFromMessage(userMessage.content);
     }
 
     chat.messages.push(userMessage);
+    await chat.save();
 
-    const conversationHistory = chat.messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    }));
+    const conversationHistory = getConversationContext(chat.messages, 10);
 
-    const ideas = await generateIdeasJson(message.trim(), conversationHistory.slice(-8));
+    const ideas = await generateIdeasJson(conversationHistory);
     const assistantContent = JSON.stringify(ideas);
 
     chat.messages.push({
       role: "assistant",
       content: assistantContent,
       ideas,
+      createdAt: new Date(),
     });
 
     await chat.save();
@@ -300,23 +313,73 @@ app.delete("/chat/:id", authMiddleware, async (req, res) => {
   }
 });
 
-app.post("/generate", authMiddleware, checkUsageLimit, async (req, res) => {
+app.post("/generate", authMiddleware, checkUsage, async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, chatId } = req.body;
 
     if (!prompt || !prompt.trim()) {
       return res.status(400).json({ error: "Prompt is required" });
     }
 
-    const ideas = await generateIdeasJson(prompt.trim());
+    const userText = prompt.trim();
+    const userMessage = { role: "user", content: userText, createdAt: new Date() };
+    let chat = null;
+    let conversationMessages = [{ role: "user", content: userText }];
+
+    if (chatId) {
+      chat = await Chat.findOne({ _id: chatId, userId: req.user.id });
+      if (!chat) {
+        return res.status(404).json({ error: "Chat not found" });
+      }
+
+      if (chat.messages.length === 0) {
+        chat.title = makeTitleFromMessage(userText);
+      }
+
+      chat.messages.push(userMessage);
+      await chat.save();
+      conversationMessages = getConversationContext(chat.messages, 10);
+    }
+
+    const ideas = await generateIdeasJson(conversationMessages);
+
+    if (chat) {
+      chat.messages.push({
+        role: "assistant",
+        content: JSON.stringify(ideas),
+        ideas,
+        createdAt: new Date(),
+      });
+      await chat.save();
+    }
+
     const usage = await consumeUsage(req.dbUser);
 
-    res.json({ ideas, usage });
+    res.json({ ideas, usage, chat });
   } catch (err) {
     console.log("GENERATE ERROR:", err);
     const message = err.message || "Generation failed";
     const status = message.includes("invalid JSON") ? 502 : 500;
     res.status(status).json({ error: message });
+  }
+});
+
+app.delete("/chat/:id/messages", authMiddleware, async (req, res) => {
+  try {
+    const chat = await Chat.findOne({ _id: req.params.id, userId: req.user.id });
+
+    if (!chat) {
+      return res.status(404).json({ error: "Chat not found" });
+    }
+
+    chat.messages = [];
+    chat.title = "New Chat";
+    await chat.save();
+
+    res.json({ chat, message: "Chat cleared" });
+  } catch (err) {
+    console.log("CLEAR CHAT ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -335,7 +398,29 @@ app.get("/usage", authMiddleware, async (req, res) => {
   }
 });
 
-app.post("/billing/create-checkout-session", authMiddleware, async (req, res) => {
+app.get("/profile", authMiddleware, async (req, res) => {
+  try {
+    const dbUser = await User.findById(req.user.id).select("email plan usageCount lastReset");
+
+    if (!dbUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    await resetUsageIfNeeded(dbUser);
+    const usage = getUsageSnapshot(dbUser);
+
+    res.json({
+      email: dbUser.email,
+      plan: dbUser.plan,
+      usageCount: usage.usageCount,
+      remainingUsage: usage.remaining ?? -1,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const createCheckoutSessionHandler = async (req, res) => {
   try {
     if (!stripe || !STRIPE_PRICE_ID) {
       return res.status(500).json({ error: "Stripe is not configured" });
@@ -349,7 +434,7 @@ app.post("/billing/create-checkout-session", authMiddleware, async (req, res) =>
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-      success_url: `${FRONTEND_URL}?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${FRONTEND_URL}?payment=success`,
       cancel_url: `${FRONTEND_URL}?payment=cancelled`,
       customer_email: user.email,
       client_reference_id: String(user._id),
@@ -359,6 +444,46 @@ app.post("/billing/create-checkout-session", authMiddleware, async (req, res) =>
     });
 
     res.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+app.post("/create-checkout-session", authMiddleware, createCheckoutSessionHandler);
+app.post("/billing/create-checkout-session", authMiddleware, createCheckoutSessionHandler);
+
+app.post("/stripe/webhook", async (req, res) => {
+  try {
+    if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+      return res.status(500).json({ error: "Stripe webhook is not configured" });
+    }
+
+    const signature = req.headers["stripe-signature"];
+    if (!signature) {
+      return res.status(400).json({ error: "Missing stripe-signature header" });
+    }
+
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(req.body, signature, STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+      return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
+    }
+
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
+      const userId = session.client_reference_id || session.metadata?.userId;
+
+      if (userId) {
+        const user = await User.findById(userId);
+        if (user) {
+          user.plan = "premium";
+          await user.save();
+        }
+      }
+    }
+
+    res.json({ received: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -1,20 +1,24 @@
 import User from "../models/User.js";
 
 const DAILY_FREE_LIMIT = 5;
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+const getDayKey = (date) => {
+  const d = new Date(date);
+  return `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+};
 
 export const resetUsageIfNeeded = async (user) => {
   const lastReset = user.lastReset ? new Date(user.lastReset) : new Date(0);
   const now = new Date();
 
-  if (now.getTime() - lastReset.getTime() >= DAY_IN_MS) {
+  if (getDayKey(lastReset) !== getDayKey(now)) {
     user.usageCount = 0;
     user.lastReset = now;
     await user.save();
   }
 };
 
-export const checkUsageLimit = async (req, res, next) => {
+export const checkUsage = async (req, res, next) => {
   try {
     const dbUser = await User.findById(req.user.id);
 
@@ -26,7 +30,7 @@ export const checkUsageLimit = async (req, res, next) => {
 
     if (dbUser.plan === "free" && dbUser.usageCount >= DAILY_FREE_LIMIT) {
       return res.status(403).json({
-        error: "Daily free limit reached. Upgrade to premium for unlimited generations.",
+        error: "Daily limit reached. Upgrade to premium.",
         code: "LIMIT_EXCEEDED",
         plan: dbUser.plan,
         usageCount: dbUser.usageCount,
@@ -40,6 +44,9 @@ export const checkUsageLimit = async (req, res, next) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+// Backward-compatible alias used by existing imports.
+export const checkUsageLimit = checkUsage;
 
 export const consumeUsage = async (user) => {
   if (user.plan === "free") {

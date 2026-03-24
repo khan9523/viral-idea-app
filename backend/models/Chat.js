@@ -26,6 +26,10 @@ const messageSchema = new mongoose.Schema(
       ],
       default: undefined,
     },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
   },
   { _id: false }
 );

@@ -21,7 +21,29 @@ const tryParseIdeas = (content) => {
 
 const ideaKey = (idea) => `${idea.title}__${idea.category}`
 
-function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading, open, onClose }) {
+const sortMessagesByCreatedAt = (items = []) => {
+  return [...items].sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0
+    return aTime - bTime
+  })
+}
+
+const formatMessageTime = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenProfile, activePage, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading, open, onClose }) {
+  const used = usage?.usageCount ?? 0
+  const limit = usage?.dailyLimit ?? 5
+  const remaining = usage?.remaining ?? Math.max(0, limit - used)
+  const isPremium = usage?.plan === 'premium'
+  const progressPercent = isPremium ? 100 : Math.min(100, Math.round((used / limit) * 100))
+  const nearLimit = !isPremium && remaining <= 1
+
   return (
     <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
       <div className="sidebar-header">
@@ -30,19 +52,29 @@ function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, darkMode, onTo
       </div>
 
       <div className="plan-card">
-        <span className={`plan-badge ${usage?.plan === 'premium' ? 'premium' : 'free'}`}>
-          {usage?.plan === 'premium' ? 'Premium' : 'Free'}
+        <span className={`plan-badge ${isPremium ? 'premium' : 'free'}`}>
+          {isPremium ? 'Premium' : 'Free'}
         </span>
 
         <div className="usage-meta">
-          {usage?.plan === 'premium' ? (
+          {isPremium ? (
             <p>Unlimited generations</p>
           ) : (
-            <p>{usage?.remaining ?? 0} / {usage?.dailyLimit ?? 5} generations left today</p>
+            <>
+              <p>{used} / {limit} requests used</p>
+              <p className="usage-remaining">{remaining} requests remaining today</p>
+              {nearLimit && <p className="usage-warning">You are close to your daily limit.</p>}
+            </>
           )}
         </div>
 
-        {usage?.plan !== 'premium' && (
+        {!isPremium && (
+          <div className="usage-progress" aria-label="Usage progress">
+            <div className="usage-progress-fill" style={{ width: `${progressPercent}%` }} />
+          </div>
+        )}
+
+        {!isPremium && (
           <button className="upgrade-btn" onClick={onUpgrade} disabled={paymentLoading}>
             {paymentLoading ? 'Redirecting...' : 'Upgrade to Premium'}
           </button>
@@ -55,6 +87,14 @@ function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, darkMode, onTo
             <path d="M12 5v14M5 12h14" />
           </svg>
           New chat
+        </button>
+
+        <button className={`sidebar-profile-btn${activePage === 'profile' ? ' active' : ''}`} title="Profile" onClick={onOpenProfile}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M20 21a8 8 0 0 0-16 0" />
+            <circle cx="12" cy="7" r="4" />
+          </svg>
+          Profile
         </button>
       </div>
 
@@ -86,6 +126,84 @@ function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, darkMode, onTo
         </button>
       </div>
     </aside>
+  )
+}
+
+function ProfilePage({ profile, profileLoading, profileError, onRefresh, onUpgrade, onLogout, paymentLoading }) {
+  const planLabel = profile?.plan === 'premium' ? 'Premium' : 'Free'
+  const used = profile?.usageCount ?? 0
+  const remaining = profile?.remainingUsage
+  const isUnlimited = profile?.plan === 'premium' || (typeof remaining === 'number' && remaining < 0)
+  const freeLimit = used + (typeof remaining === 'number' && remaining >= 0 ? remaining : 0)
+
+  if (profileLoading) {
+    return (
+      <div className="profile-wrap">
+        <div className="profile-card profile-loading-card">
+          <div className="spinner" />
+          <p>Loading profile...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (profileError) {
+    return (
+      <div className="profile-wrap">
+        <div className="profile-card">
+          <h3 className="profile-title">Profile</h3>
+          <p className="profile-error">{profileError}</p>
+          <button className="idea-action-btn" onClick={onRefresh}>Try again</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="profile-wrap">
+      <section className="profile-card">
+        <div className="profile-header">
+          <h3 className="profile-title">User Profile</h3>
+          <button className="idea-action-btn" onClick={onRefresh}>Refresh</button>
+        </div>
+
+        <div className="profile-grid">
+          <article className="profile-section">
+            <h4>Account Info</h4>
+            <div className="profile-row"><span>Email</span><strong>{profile?.email || 'N/A'}</strong></div>
+          </article>
+
+          <article className="profile-section">
+            <h4>Usage Stats</h4>
+            <div className="profile-row"><span>Used today</span><strong>{used}</strong></div>
+            <div className="profile-row"><span>Remaining</span><strong>{isUnlimited ? 'Unlimited' : (remaining ?? 0)}</strong></div>
+            {profile?.plan !== 'premium' && (
+              <div className="profile-row"><span>Daily limit</span><strong>{freeLimit}</strong></div>
+            )}
+          </article>
+
+          <article className="profile-section">
+            <h4>Plan Details</h4>
+            <div className="profile-row"><span>Current plan</span><strong>{planLabel}</strong></div>
+            <p className="profile-plan-copy">
+              {profile?.plan === 'premium'
+                ? 'Your account has unlimited generations.'
+                : 'Upgrade to premium for unlimited generations and no daily limit.'}
+            </p>
+
+            <div className="profile-actions">
+              {profile?.plan !== 'premium' && (
+                <button className="upgrade-btn profile-upgrade" onClick={onUpgrade} disabled={paymentLoading}>
+                  {paymentLoading ? 'Redirecting...' : 'Upgrade to Premium'}
+                </button>
+              )}
+              <button className="idea-action-btn" onClick={onLogout}>Logout</button>
+              <button className="idea-action-btn" disabled title="Coming soon">Edit Profile (Coming Soon)</button>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
   )
 }
 
@@ -140,6 +258,7 @@ function IdeasGrid({ ideas, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId
 function Message({ msg, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, savedIdeaKeys, onGenerateScript, scriptLoadingKey }) {
   const isUser = msg.role === 'user'
   const ideas = !isUser ? (Array.isArray(msg.ideas) ? msg.ideas : tryParseIdeas(msg.content)) : []
+  const sentAt = formatMessageTime(msg.createdAt)
 
   return (
     <div className={`message-row ${isUser ? 'user-row' : 'assistant-row'}`}>
@@ -162,6 +281,8 @@ function Message({ msg, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, sa
         )}
 
         {!isUser && ideas.length === 0 && <p className="bubble-text">{msg.content}</p>}
+
+        {sentAt && <p className="message-time">{sentAt}</p>}
       </div>
 
       {isUser && <div className="avatar user-avatar" aria-label="You">YOU</div>}
@@ -296,6 +417,7 @@ function ScriptModal({ script, idea, open, onClose, onCopy, copied }) {
 }
 
 function App() {
+  const [activePage, setActivePage] = useState('chat')
   const [currentChatId, setCurrentChatId] = useState(null)
   const [chats, setChats] = useState([])
   const [messages, setMessages] = useState([])
@@ -318,6 +440,9 @@ function App() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [profile, setProfile] = useState(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const [profileError, setProfileError] = useState('')
 
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
@@ -361,10 +486,16 @@ function App() {
     if (!isLoggedIn) return
 
     const params = new URLSearchParams(window.location.search)
-    const sessionId = params.get('session_id')
+    const paymentStatus = params.get('payment')
 
-    if (sessionId) {
-      verifyPayment(sessionId)
+    if (paymentStatus === 'success') {
+      confirmPremiumAfterCheckout()
+    }
+
+    if (paymentStatus) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('payment')
+      window.history.replaceState({}, '', url)
     }
   }, [isLoggedIn])
 
@@ -390,6 +521,31 @@ function App() {
       setUsage(data)
     } catch (err) {
       console.error('Usage error:', err)
+    }
+  }
+
+  const fetchProfile = async () => {
+    const token = localStorage.getItem('token')
+    if (!token) return
+
+    setProfileLoading(true)
+    setProfileError('')
+    try {
+      const res = await fetch(`${API_URL}/profile`, {
+        headers: { Authorization: 'Bearer ' + token },
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to load profile')
+      }
+
+      setProfile(data)
+      setUsage((prev) => ({ ...prev, plan: data.plan, usageCount: data.usageCount, remaining: data.remainingUsage ?? prev.remaining }))
+    } catch (err) {
+      setProfileError(err.message || 'Could not load profile')
+    } finally {
+      setProfileLoading(false)
     }
   }
 
@@ -432,9 +588,36 @@ function App() {
 
       const data = await res.json()
       setCurrentChatId(data.chat._id)
-      setMessages(Array.isArray(data.chat.messages) ? data.chat.messages : [])
+      const loadedMessages = Array.isArray(data.chat.messages) ? data.chat.messages : []
+      setMessages(sortMessagesByCreatedAt(loadedMessages))
     } catch (err) {
       console.error('Load chat error:', err)
+    }
+  }
+
+  const handleClearChat = async () => {
+    if (!currentChatId || loading) return
+
+    const confirmed = window.confirm('Clear all messages in this chat?')
+    if (!confirmed) return
+
+    try {
+      const res = await fetch(`${API_URL}/chat/${currentChatId}/messages`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to clear chat')
+      }
+
+      setMessages([])
+      if (data.chat?._id) setCurrentChatId(data.chat._id)
+      fetchChats()
+    } catch (err) {
+      console.error('Clear chat error:', err)
+      alert(err.message || 'Could not clear chat')
     }
   }
 
@@ -483,34 +666,47 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('token')
     setIsLoggedIn(false)
+    setActivePage('chat')
     setCurrentChatId(null)
     setChats([])
     setMessages([])
+    setProfile(null)
+    setProfileError('')
     setUsage({ plan: 'free', usageCount: 0, remaining: 5, dailyLimit: 5 })
   }
 
-  const verifyPayment = async (sessionId) => {
+  const confirmPremiumAfterCheckout = async () => {
     setPaymentLoading(true)
     try {
-      const res = await fetch(`${API_URL}/billing/verify-session`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ sessionId }),
-      })
+      // Webhook may take a moment after redirect, so retry usage checks briefly.
+      let premiumActivated = false
+      const maxAttempts = 8
 
-      const data = await res.json()
+      for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+        const res = await fetch(`${API_URL}/usage`, {
+          headers: { Authorization: 'Bearer ' + localStorage.getItem('token') },
+        })
 
-      if (res.ok) {
+        if (res.ok) {
+          const data = await res.json()
+          setUsage(data)
+
+          if (data.plan === 'premium') {
+            premiumActivated = true
+            break
+          }
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 1200))
+      }
+
+      if (premiumActivated) {
         setPaymentSuccess('Payment successful. You are now Premium.')
-        fetchUsage()
-        const url = new URL(window.location.href)
-        url.searchParams.delete('session_id')
-        window.history.replaceState({}, '', url)
       } else {
-        setPaymentSuccess(data.error || 'Payment verification failed')
+        setPaymentSuccess('Payment received. Premium activation may take a minute.')
       }
     } catch {
-      setPaymentSuccess('Payment verification failed')
+      setPaymentSuccess('Payment completed, but status refresh failed. Please reload shortly.')
     } finally {
       setPaymentLoading(false)
     }
@@ -519,7 +715,7 @@ function App() {
   const handleUpgrade = async () => {
     setPaymentLoading(true)
     try {
-      const res = await fetch(`${API_URL}/billing/create-checkout-session`, {
+      const res = await fetch(`${API_URL}/create-checkout-session`, {
         method: 'POST',
         headers: authHeaders(),
       })
@@ -545,7 +741,7 @@ function App() {
     const text = input.trim()
     if (!text || loading) return
 
-    const optimisticUserMsg = { role: 'user', content: text }
+    const optimisticUserMsg = { role: 'user', content: text, createdAt: new Date().toISOString() }
     setMessages((prev) => [...prev, optimisticUserMsg])
     setInput('')
     setLoading(true)
@@ -561,7 +757,7 @@ function App() {
       const res = await fetch(`${API_URL}/chat/${chatId}`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, chatId }),
       })
 
       const data = await res.json()
@@ -578,12 +774,12 @@ function App() {
       }
 
       const nextMessages = Array.isArray(data.chat?.messages) ? data.chat.messages : []
-      setMessages(nextMessages)
+      setMessages(sortMessagesByCreatedAt(nextMessages))
       setCurrentChatId(data.chat?._id || chatId)
       if (data.usage) setUsage(data.usage)
       fetchChats()
     } catch {
-      setMessages((prev) => [...prev, { role: 'assistant', content: 'Network error. Please try again.' }])
+      setMessages((prev) => [...prev, { role: 'assistant', content: 'Network error. Please try again.', createdAt: new Date().toISOString() }])
     } finally {
       setLoading(false)
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -591,11 +787,13 @@ function App() {
   }
 
   const handleSelectChat = (chatId) => {
+    setActivePage('chat')
     loadChat(chatId)
   }
 
   const handleNewChat = async () => {
     try {
+      setActivePage('chat')
       const createdChat = await createChat()
       setCurrentChatId(createdChat._id)
       setMessages([])
@@ -656,6 +854,11 @@ function App() {
     setTimeout(() => setScriptCopied(false), 1500)
   }
 
+  const handleOpenProfile = async () => {
+    setActivePage('profile')
+    await fetchProfile()
+  }
+
   if (checkingAuth) {
     return (
       <div className="splash">
@@ -685,6 +888,8 @@ function App() {
         currentChatId={currentChatId}
         onSelectChat={(id) => { handleSelectChat(id); setSidebarOpen(false) }}
         onNewChat={() => { handleNewChat(); setSidebarOpen(false) }}
+        onOpenProfile={() => { handleOpenProfile(); setSidebarOpen(false) }}
+        activePage={activePage}
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((d) => !d)}
         onLogout={handleLogout}
@@ -702,25 +907,44 @@ function App() {
               <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <span className="chat-topbar-title">AI Ideas Studio</span>
+          <span className="chat-topbar-title">{activePage === 'profile' ? 'Profile' : 'AI Ideas Studio'}</span>
 
           <div className="topbar-actions">
-            <div className="category-pills">
-              {CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  className={`category-pill${filterCategory === cat ? ' active' : ''}`}
-                  onClick={() => setFilterCategory(cat)}
-                >
-                  {cat}
+            <button className="topbar-profile-btn" onClick={handleOpenProfile}>Profile</button>
+            {activePage === 'chat' && (
+              <>
+                <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
+                  Clear chat
                 </button>
-              ))}
-            </div>
+                <div className="category-pills">
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      className={`category-pill${filterCategory === cat ? ' active' : ''}`}
+                      onClick={() => setFilterCategory(cat)}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </header>
 
         {paymentSuccess && <div className="payment-success-banner">{paymentSuccess}</div>}
 
+        {activePage === 'profile' ? (
+          <ProfilePage
+            profile={profile}
+            profileLoading={profileLoading}
+            profileError={profileError}
+            onRefresh={fetchProfile}
+            onUpgrade={handleUpgrade}
+            onLogout={handleLogout}
+            paymentLoading={paymentLoading}
+          />
+        ) : (
         <div className="messages-area">
           {messages.length === 0 && (
             <div className="welcome-screen">
@@ -758,8 +982,9 @@ function App() {
           {loading && <ThinkingBubble />}
           <div ref={messagesEndRef} />
         </div>
+        )}
 
-        <div className="input-bar">
+        {activePage === 'chat' && <div className="input-bar">
           <form className="input-form" onSubmit={handleSend}>
             <textarea
               ref={inputRef}
@@ -789,7 +1014,7 @@ function App() {
             </button>
           </form>
           <p className="input-hint">Press Enter to send · Shift+Enter for new line</p>
-        </div>
+        </div>}
       </main>
 
       <UpgradeModal
