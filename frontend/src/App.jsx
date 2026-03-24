@@ -596,7 +596,7 @@ function Message({ msg, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, sa
           />
         )}
 
-        {!isUser && ideas.length === 0 && <p className="bubble-text">{msg.content}</p>}
+        {!isUser && ideas.length === 0 && <pre className="bubble-text bubble-stream">{msg.content}</pre>}
 
         {sentAt && <p className="message-time">{sentAt}</p>}
       </div>
@@ -763,6 +763,7 @@ function App() {
   const [chats, setChats] = useState([])
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
+  const [streamingText, setStreamingText] = useState('')
   const [darkMode, setDarkMode] = useState(true)
   const [input, setInput] = useState('')
   const [copiedIdeaId, setCopiedIdeaId] = useState('')
@@ -1160,6 +1161,7 @@ function App() {
     setMessages((prev) => [...prev, optimisticUserMsg])
     setInput('')
     setLoading(true)
+    setStreamingText('')
 
     try {
       let chatId = currentChatId
@@ -1169,31 +1171,73 @@ function App() {
         setCurrentChatId(chatId)
       }
 
-      const res = await fetch(`${API_URL}/chat/${chatId}`, {
+      const res = await fetch(`${API_URL}/chat/${chatId}/stream`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ message: text, chatId }),
+        body: JSON.stringify({ message: text }),
       })
 
-      const data = await res.json()
-
       if (!res.ok) {
+        const data = await res.json()
         if (data.code === 'LIMIT_EXCEEDED') {
           setShowUpgradePopup(true)
           setUsage((prev) => ({ ...prev, ...data }))
           setMessages((prev) => prev.slice(0, -1))
           setInput(text)
+          setStreamingText('')
           return
         }
         throw new Error(data.error || 'Failed to send message')
       }
 
-      const nextMessages = Array.isArray(data.chat?.messages) ? data.chat.messages : []
-      setMessages(sortMessagesByCreatedAt(nextMessages))
-      setCurrentChatId(data.chat?._id || chatId)
-      if (data.usage) setUsage(data.usage)
-      fetchChats()
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const jsonStr = line.slice(6).trim()
+          if (!jsonStr) continue
+
+          let parsed
+          try { parsed = JSON.parse(jsonStr) } catch { continue }
+
+          if (parsed.error) {
+            if (parsed.error.includes('LIMIT_EXCEEDED') || parsed.code === 'LIMIT_EXCEEDED') {
+              setShowUpgradePopup(true)
+              setMessages((prev) => prev.slice(0, -1))
+              setInput(text)
+              setStreamingText('')
+              return
+            }
+            throw new Error(parsed.error)
+          }
+
+          if (parsed.text) {
+            accumulated += parsed.text
+            setStreamingText(accumulated)
+          }
+
+          if (parsed.done) {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'assistant', content: accumulated, createdAt: new Date().toISOString() },
+            ])
+            setStreamingText('')
+            if (parsed.usage) setUsage(parsed.usage)
+            fetchChats()
+          }
+        }
+      }
     } catch {
+      setStreamingText('')
       setMessages((prev) => [...prev, { role: 'assistant', content: 'Network error. Please try again.', createdAt: new Date().toISOString() }])
     } finally {
       setLoading(false)
@@ -1430,7 +1474,15 @@ function App() {
             />
           ))}
 
-          {loading && <ThinkingBubble />}
+          {loading && !streamingText && <ThinkingBubble />}
+          {streamingText && (
+            <div className="message-row assistant-row">
+              <div className="avatar assistant-avatar" aria-label="Assistant">AI</div>
+              <div className="bubble assistant-bubble">
+                <pre className="bubble-text bubble-stream">{streamingText}</pre>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
         )}

@@ -180,36 +180,32 @@ const generateIdeasJson = async (conversationMessages = []) => {
   return validateIdeas(parsed.ideas);
 };
 
-const generateConversational = async (conversationMessages = []) => {
-  const systemPrompt = `You are an expert content creator and assistant.
+const CONVERSATIONAL_SYSTEM_PROMPT = `You are an expert content creator and assistant.
 
-Write like ChatGPT — natural, human, conversational.
-
-STRICT RULES:
-- Do NOT use bullet points
-- Do NOT use numbering
-- Do NOT use labels like "Idea 1"
-- Do NOT use templates or structured format
-- Do NOT use markdown
-- Do NOT sound robotic
+FORMAT:
+- Use numbered labels like "Idea 1:", "Idea 2:", "Idea 3:"
+- Use bullet points under each idea to break down key details
+- Use numbering where it makes sense (steps, lists)
+- Use markdown-style formatting — bold titles, bullet lists
 
 STYLE:
-- Write like you're talking to a friend
-- Smooth, flowing sentences
-- Engaging and simple
+- Write like ChatGPT — clear, engaging, helpful
+- Be specific and actionable
+- Keep a friendly, confident tone
 
 OUTPUT:
-Generate 2–3 viral content ideas in natural paragraph form.
+Generate 2–3 viral content ideas. For each idea:
+- Label it (e.g. "Idea 1: [catchy title]")
+- Bullet point the key details, angle, and why it would go viral
 
 FOLLOW-UP:
-At the end, ask 1–2 natural follow-up questions.
+At the end, ask 1–2 natural follow-up questions to help refine the ideas further.`;
 
-Keep it human and conversational.`;
-
+const generateConversational = async (conversationMessages = []) => {
   const completion = await client.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: CONVERSATIONAL_SYSTEM_PROMPT },
       ...conversationMessages,
     ],
   });
@@ -396,6 +392,67 @@ app.delete("/chat/:id", authMiddleware, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+app.post("/chat/:id/stream", authMiddleware, checkUsage, async (req, res) => {
+  try {
+    const { message } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    const chat = await Chat.findOne({ _id: req.params.id, userId: req.user.id });
+    if (!chat) {
+      return res.status(404).json({ error: "Chat not found" });
+    }
+
+    const userMessage = { role: "user", content: message.trim(), createdAt: new Date() };
+    if (chat.messages.length === 0) {
+      chat.title = makeTitleFromMessage(userMessage.content);
+    }
+    chat.messages.push(userMessage);
+    await chat.save();
+
+    const conversationHistory = getConversationContext(chat.messages, 10);
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const stream = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      stream: true,
+      messages: [
+        { role: "system", content: CONVERSATIONAL_SYSTEM_PROMPT },
+        ...conversationHistory,
+      ],
+    });
+
+    let fullText = "";
+    for await (const chunk of stream) {
+      const delta = chunk.choices?.[0]?.delta?.content;
+      if (delta) {
+        fullText += delta;
+        res.write(`data: ${JSON.stringify({ text: delta })}\n\n`);
+      }
+    }
+
+    chat.messages.push({ role: "assistant", content: fullText, createdAt: new Date() });
+    await chat.save();
+
+    const usage = await consumeUsage(req.dbUser);
+
+    res.write(`data: ${JSON.stringify({ done: true, chatId: chat._id.toString(), usage })}\n\n`);
+    res.end();
+  } catch (err) {
+    console.log("STREAM ERROR:", err);
+    res.write(`data: ${JSON.stringify({ error: err.message || "Stream failed" })}\n\n`);
+    res.end();
+  }
+});
+
+
 
 app.post("/generate", authMiddleware, checkUsage, async (req, res) => {
   try {
