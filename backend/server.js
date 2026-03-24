@@ -37,16 +37,37 @@ const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
 const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const MONTHLY_PLAN_AMOUNT = 24900;
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-const RAZORPAY_MONTHLY_PLAN_AMOUNT = Number(process.env.RAZORPAY_MONTHLY_PLAN_AMOUNT || 24900);
+const resolveRazorpayConfig = () => {
+  const keyId = process.env.RAZORPAY_KEY_ID
+    || process.env.RAZORPAY_KEY
+    || process.env.VITE_RAZORPAY_KEY_ID;
+
+  const keySecret = process.env.RAZORPAY_KEY_SECRET
+    || process.env.RAZORPAY_SECRET
+    || process.env.RAZORPAY_SECRET_KEY;
+
+  const monthlyAmount = Number(process.env.RAZORPAY_MONTHLY_PLAN_AMOUNT || 24900);
+
+  return {
+    keyId,
+    keySecret,
+    monthlyAmount: Number.isFinite(monthlyAmount) ? monthlyAmount : 24900,
+  };
+};
 
 const buildRazorpayAuthHeader = () => {
-  if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-    throw new Error("Razorpay is not configured");
+  const { keyId, keySecret } = resolveRazorpayConfig();
+
+  if (!keyId || !keySecret) {
+    const missing = [
+      !keyId ? "RAZORPAY_KEY_ID" : null,
+      !keySecret ? "RAZORPAY_KEY_SECRET" : null,
+    ].filter(Boolean).join(", ");
+
+    throw new Error(`Razorpay is not configured. Missing: ${missing}`);
   }
 
-  return `Basic ${Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString("base64")}`;
+  return `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
 };
 
 const fetchRazorpayOrderAmount = async (orderId) => {
@@ -58,24 +79,26 @@ const fetchRazorpayOrderAmount = async (orderId) => {
     });
 
     if (!response.ok) {
-      return RAZORPAY_MONTHLY_PLAN_AMOUNT;
+      return resolveRazorpayConfig().monthlyAmount;
     }
 
     const order = await response.json();
     const amount = Number(order?.amount);
-    return Number.isFinite(amount) ? amount : RAZORPAY_MONTHLY_PLAN_AMOUNT;
+    return Number.isFinite(amount) ? amount : resolveRazorpayConfig().monthlyAmount;
   } catch {
-    return RAZORPAY_MONTHLY_PLAN_AMOUNT;
+    return resolveRazorpayConfig().monthlyAmount;
   }
 };
 
 const verifyRazorpaySignature = (orderId, paymentId, signature) => {
-  if (!RAZORPAY_KEY_SECRET) {
+  const { keySecret } = resolveRazorpayConfig();
+
+  if (!keySecret) {
     return false;
   }
 
   const generated = crypto
-    .createHmac("sha256", RAZORPAY_KEY_SECRET)
+    .createHmac("sha256", keySecret)
     .update(`${orderId}|${paymentId}`)
     .digest("hex");
 
@@ -692,6 +715,8 @@ const createSubscriptionHandler = async (req, res) => {
 
 const createRazorpayOrderHandler = async (req, res) => {
   try {
+    const { keyId, monthlyAmount } = resolveRazorpayConfig();
+
     const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -704,7 +729,7 @@ const createRazorpayOrderHandler = async (req, res) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: RAZORPAY_MONTHLY_PLAN_AMOUNT,
+        amount: monthlyAmount,
         currency: "INR",
         receipt: `premium_${user._id}_${Date.now()}`,
         notes: {
@@ -723,7 +748,7 @@ const createRazorpayOrderHandler = async (req, res) => {
       orderId: data.id,
       amount: data.amount,
       currency: data.currency,
-      keyId: RAZORPAY_KEY_ID,
+      keyId,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message || "Could not create Razorpay order" });
