@@ -2,9 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
 const API_URL =
-  window.location.hostname === 'localhost'
+  import.meta.env.VITE_API_URL ||
+  (window.location.hostname === 'localhost'
     ? 'http://localhost:5000'
-    : 'https://viral-idea-app.onrender.com'
+    : 'https://viral-idea-app.onrender.com')
 
 const CATEGORIES = ['All', 'Funny', 'Educational', 'Viral']
 
