@@ -41,7 +41,10 @@ const client = new OpenAI({
 });
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const FRONTEND_URL = process.env.FRONTEND_URL
+  || (process.env.NODE_ENV === "production"
+    ? "https://viral-idea-app.vercel.app"
+    : "http://localhost:5173");
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
 const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
