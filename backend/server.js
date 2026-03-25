@@ -27,6 +27,15 @@ app.use(cors());
 app.use(["/stripe/webhook", "/webhook"], express.raw({ type: "application/json" }));
 app.use(express.json());
 
+// Public health endpoints for deployments, monitors, and keep-alive pings.
+app.get("/", (_req, res) => {
+  res.json({ message: "Backend working" });
+});
+
+app.get("/health", (_req, res) => {
+  res.status(200).json({ ok: true, uptime: Math.floor(process.uptime()) });
+});
+
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
