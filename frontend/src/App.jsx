@@ -627,6 +627,8 @@ function AuthScreen({
   otpStep,
   otpMessage,
   loading,
+  resendLoading,
+  resendCooldown,
   error,
   onChangeMode,
   onChangeEmail,
@@ -634,6 +636,7 @@ function AuthScreen({
   onChangeOtp,
   onLogin,
   onSignup,
+  onResendOtp,
   onGoogleLogin,
   googleAuthEnabled,
 }) {
@@ -703,6 +706,23 @@ function AuthScreen({
                 inputMode="numeric"
                 maxLength={6}
               />
+            )}
+
+            {mode === 'signup' && otpStep && (
+              <div className="auth-otp-actions">
+                <button
+                  type="button"
+                  className="auth-resend-btn"
+                  onClick={onResendOtp}
+                  disabled={loading || resendLoading || resendCooldown > 0}
+                >
+                  {resendLoading
+                    ? 'Resending...'
+                    : resendCooldown > 0
+                    ? `Resend OTP in ${resendCooldown}s`
+                    : 'Resend OTP'}
+                </button>
+              </div>
             )}
 
             {mode === 'login' && <p className="auth-forgot-hint">Forgot password? (Coming soon)</p>}
@@ -886,6 +906,8 @@ function App({ googleAuthEnabled = false }) {
   const [authOtpStep, setAuthOtpStep] = useState(false)
   const [authOtpMessage, setAuthOtpMessage] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [authResendLoading, setAuthResendLoading] = useState(false)
+  const [authResendCooldown, setAuthResendCooldown] = useState(0)
   const [authError, setAuthError] = useState('')
 
   const messagesEndRef = useRef(null)
@@ -951,6 +973,16 @@ function App({ googleAuthEnabled = false }) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  useEffect(() => {
+    if (authResendCooldown <= 0) return undefined
+
+    const timer = setInterval(() => {
+      setAuthResendCooldown((seconds) => (seconds > 0 ? seconds - 1 : 0))
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [authResendCooldown])
 
   const authHeaders = () => ({
     'Content-Type': 'application/json',
@@ -1196,10 +1228,14 @@ function App({ googleAuthEnabled = false }) {
 
         const otpData = await otpRes.json()
         if (!otpRes.ok) {
+          if (otpData.waitSeconds) {
+            setAuthResendCooldown(otpData.waitSeconds)
+          }
           throw new Error(otpData.error || 'Failed to send OTP')
         }
 
         setAuthOtpStep(true)
+        setAuthResendCooldown(Number(otpData.resendAfterSeconds || 45))
         setAuthOtpMessage(
           otpData.devOtp
             ? `OTP sent. Dev OTP: ${otpData.devOtp}`
@@ -1224,10 +1260,49 @@ function App({ googleAuthEnabled = false }) {
       setAuthOtp('')
       setAuthOtpStep(false)
       setAuthOtpMessage('')
+      setAuthResendCooldown(0)
+      setAuthResendLoading(false)
     } catch (err) {
       setAuthError(err.message || 'Signup failed')
     } finally {
       setAuthLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    if (!authEmail) {
+      setAuthError('Email is required')
+      return
+    }
+
+    setAuthError('')
+    setAuthResendLoading(true)
+
+    try {
+      const resendRes = await fetch(`${API_URL}/signup/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail }),
+      })
+
+      const resendData = await resendRes.json()
+      if (!resendRes.ok) {
+        if (resendData.waitSeconds) {
+          setAuthResendCooldown(resendData.waitSeconds)
+        }
+        throw new Error(resendData.error || 'Failed to resend OTP')
+      }
+
+      setAuthResendCooldown(Number(resendData.resendAfterSeconds || 45))
+      setAuthOtpMessage(
+        resendData.devOtp
+          ? `OTP resent. Dev OTP: ${resendData.devOtp}`
+          : 'A new OTP has been sent. Please check your email inbox and spam folder.',
+      )
+    } catch (err) {
+      setAuthError(err.message || 'Failed to resend OTP')
+    } finally {
+      setAuthResendLoading(false)
     }
   }
 
@@ -1237,6 +1312,8 @@ function App({ googleAuthEnabled = false }) {
     setAuthOtp('')
     setAuthOtpStep(false)
     setAuthOtpMessage('')
+    setAuthResendCooldown(0)
+    setAuthResendLoading(false)
   }
 
   const handleLogout = () => {
@@ -1579,6 +1656,8 @@ function App({ googleAuthEnabled = false }) {
         otpStep={authOtpStep}
         otpMessage={authOtpMessage}
         loading={authLoading}
+        resendLoading={authResendLoading}
+        resendCooldown={authResendCooldown}
         error={authError}
         onChangeMode={handleChangeMode}
         onChangeEmail={setAuthEmail}
@@ -1586,6 +1665,7 @@ function App({ googleAuthEnabled = false }) {
         onChangeOtp={setAuthOtp}
         onLogin={handleLogin}
         onSignup={handleSignup}
+        onResendOtp={handleResendOtp}
         onGoogleLogin={handleGoogleLogin}
         googleAuthEnabled={googleAuthEnabled}
       />

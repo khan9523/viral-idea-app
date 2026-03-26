@@ -107,19 +107,31 @@ const MONTHLY_PLAN_AMOUNT = 24900;
 const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
 const OTP_EXPIRY_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
+const OTP_RESEND_COOLDOWN_SECONDS = 45;
+const OTP_MAX_RESENDS = 5;
 
 const smtpPort = Number(process.env.SMTP_PORT || 587);
+const smtpSecure = String(process.env.SMTP_SECURE || "").trim().toLowerCase() === "true";
 const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
   ? nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number.isFinite(smtpPort) ? smtpPort : 587,
-    secure: smtpPort === 465,
+    secure: smtpSecure || smtpPort === 465,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   })
   : null;
+
+if (mailTransport) {
+  mailTransport.verify()
+    .then(() => console.log("SMTP transport verified"))
+    .catch((err) => console.log("SMTP verify failed:", err?.message || err));
+}
 
 const hashSignupOtp = (email, otp) => {
   const secret = process.env.JWT_SECRET || "otp-default-secret";
@@ -131,21 +143,31 @@ const hashSignupOtp = (email, otp) => {
 
 const generateOtp = () => String(crypto.randomInt(100000, 1000000));
 
+const getOtpCooldownSecondsRemaining = (lastSentAt) => {
+  if (!lastSentAt) {
+    return 0;
+  }
+
+  const elapsedSeconds = Math.floor((Date.now() - new Date(lastSentAt).getTime()) / 1000);
+  return Math.max(0, OTP_RESEND_COOLDOWN_SECONDS - elapsedSeconds);
+};
+
 const sendSignupOtpEmail = async (email, otp) => {
   if (!mailTransport) {
     if (process.env.NODE_ENV !== "production") {
       console.log(`DEV OTP for ${email}: ${otp}`);
+      return;
     }
-    return;
+    throw new Error("OTP email service is not configured");
   }
 
   const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
   await mailTransport.sendMail({
-    from: fromEmail,
+    from: `ViralAI <${fromEmail}>`,
     to: email,
-    subject: "Your ViralAI signup OTP",
-    text: `Your OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
-    html: `<p>Your OTP is <strong>${otp}</strong>.</p><p>It expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`,
+    subject: "Your ViralAI verification code",
+    text: `Your ViralAI OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
+    html: `<p>Your ViralAI OTP is <strong style="font-size:18px">${otp}</strong>.</p><p>It expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`,
   });
 };
 
@@ -1295,10 +1317,21 @@ app.post("/signup/request-otp", async (req, res) => {
       return res.status(400).json({ error: "User already exists" });
     }
 
+    const pendingSignup = await SignupOtp.findOne({ email });
+    const cooldownSeconds = getOtpCooldownSecondsRemaining(pendingSignup?.lastSentAt);
+    if (pendingSignup && cooldownSeconds > 0) {
+      return res.status(429).json({
+        error: `Please wait ${cooldownSeconds}s before requesting another OTP`,
+        waitSeconds: cooldownSeconds,
+      });
+    }
+
     const otp = generateOtp();
     const otpHash = hashSignupOtp(email, otp);
     const passwordHash = await bcrypt.hash(password, 10);
     const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    await sendSignupOtpEmail(email, otp);
 
     await SignupOtp.findOneAndUpdate(
       { email },
@@ -1308,13 +1341,16 @@ app.post("/signup/request-otp", async (req, res) => {
         otpHash,
         otpExpiresAt,
         attempts: 0,
+        resendCount: 0,
+        lastSentAt: new Date(),
       },
       { upsert: true, setDefaultsOnInsert: true },
     );
 
-    await sendSignupOtpEmail(email, otp);
-
-    const response = { message: "OTP sent to your email" };
+    const response = {
+      message: "OTP sent to your email",
+      resendAfterSeconds: OTP_RESEND_COOLDOWN_SECONDS,
+    };
     if (!mailTransport && process.env.NODE_ENV !== "production") {
       response.devOtp = otp;
     }
@@ -1322,7 +1358,79 @@ app.post("/signup/request-otp", async (req, res) => {
     return res.json(response);
   } catch (err) {
     console.log("SIGNUP REQUEST OTP ERROR:", err);
+    if (String(err?.message || "").includes("not configured")) {
+      return res.status(503).json({ error: "OTP email service is not configured on server" });
+    }
     return res.status(500).json({ error: "Failed to send OTP" });
+  }
+});
+
+app.post("/signup/resend-otp", async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+
+    if (!email) {
+      return res.status(400).json({ error: "Email is required" });
+    }
+
+    const validationError = validateGmailEmail(email);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    const pendingSignup = await SignupOtp.findOne({ email });
+    if (!pendingSignup) {
+      return res.status(400).json({ error: "No OTP request found. Start signup again." });
+    }
+
+    if (pendingSignup.otpExpiresAt.getTime() < Date.now()) {
+      await SignupOtp.deleteOne({ _id: pendingSignup._id });
+      return res.status(400).json({ error: "OTP expired. Please request a new OTP" });
+    }
+
+    if ((pendingSignup.resendCount || 0) >= OTP_MAX_RESENDS) {
+      return res.status(429).json({ error: "Maximum OTP resend attempts reached. Try again later." });
+    }
+
+    const cooldownSeconds = getOtpCooldownSecondsRemaining(pendingSignup.lastSentAt);
+    if (cooldownSeconds > 0) {
+      return res.status(429).json({
+        error: `Please wait ${cooldownSeconds}s before resending OTP`,
+        waitSeconds: cooldownSeconds,
+      });
+    }
+
+    const otp = generateOtp();
+    await sendSignupOtpEmail(email, otp);
+
+    pendingSignup.otpHash = hashSignupOtp(email, otp);
+    pendingSignup.otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    pendingSignup.attempts = 0;
+    pendingSignup.resendCount = (pendingSignup.resendCount || 0) + 1;
+    pendingSignup.lastSentAt = new Date();
+    await pendingSignup.save();
+
+    const response = {
+      message: "OTP resent to your email",
+      resendAfterSeconds: OTP_RESEND_COOLDOWN_SECONDS,
+    };
+
+    if (!mailTransport && process.env.NODE_ENV !== "production") {
+      response.devOtp = otp;
+    }
+
+    return res.json(response);
+  } catch (err) {
+    console.log("SIGNUP RESEND OTP ERROR:", err);
+    if (String(err?.message || "").includes("not configured")) {
+      return res.status(503).json({ error: "OTP email service is not configured on server" });
+    }
+    return res.status(500).json({ error: "Failed to resend OTP" });
   }
 });
 

@@ -24,6 +24,14 @@ const signupOtpSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  resendCount: {
+    type: Number,
+    default: 0,
+  },
+  lastSentAt: {
+    type: Date,
+    default: Date.now,
+  },
 }, {
   timestamps: true,
 });
