@@ -81,7 +81,7 @@ const userSchema = new mongoose.Schema({
   }
 });
 
-userSchema.pre("save", function saveHook(next) {
+userSchema.pre("save", function saveHook() {
   if (this.email) {
     this.email = normalizeEmail(this.email);
   }
@@ -89,8 +89,6 @@ userSchema.pre("save", function saveHook(next) {
   if (isProtectedPremiumEmail(this.email)) {
     this.plan = "premium";
   }
-
-  next();
 });
 
 const blockProtectedDeletionForQuery = async function blockProtectedDeletionForQuery() {
@@ -104,12 +102,10 @@ const blockProtectedDeletionForQuery = async function blockProtectedDeletionForQ
   }
 };
 
-const blockProtectedDeletionForDocument = function blockProtectedDeletionForDocument(next) {
+const blockProtectedDeletionForDocument = function blockProtectedDeletionForDocument() {
   if (isProtectedPremiumEmail(this.email)) {
-    return next(new Error("Protected user cannot be deleted"));
+    throw new Error("Protected user cannot be deleted");
   }
-
-  return next();
 };
 
 userSchema.pre("findOneAndDelete", blockProtectedDeletionForQuery);
