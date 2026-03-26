@@ -7,6 +7,8 @@ import User, { ensureProtectedPremiumUser, getEffectivePlan, isGmailEmail, isPro
 import Payment from "./models/Payment.js";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import mongoose from "mongoose";
@@ -21,6 +23,7 @@ mongoose.connect(process.env.MONGO_URI)
   .catch((err) => console.log("MongoDB Error", err));
 
 const app = express();
+app.set("trust proxy", 1);
 
 const FRONTEND_URL = process.env.FRONTEND_URL
   || (process.env.NODE_ENV === "production"
@@ -56,6 +59,18 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 }));
+
+app.use(helmet());
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 25,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many auth attempts. Please try again later." },
+});
+
+app.use(["/signup", "/login", "/google-login"], authLimiter);
 
 app.use((err, _req, res, next) => {
   if (err?.message === "Not allowed by CORS") {
