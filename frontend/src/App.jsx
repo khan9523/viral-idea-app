@@ -619,31 +619,134 @@ function ThinkingBubble() {
   )
 }
 
-function AuthScreen({ onGoogleLogin, googleAuthEnabled }) {
+function AuthScreen({
+  mode,
+  email,
+  password,
+  otp,
+  otpStep,
+  otpMessage,
+  loading,
+  error,
+  onChangeMode,
+  onChangeEmail,
+  onChangePassword,
+  onChangeOtp,
+  onLogin,
+  onSignup,
+  onGoogleLogin,
+  googleAuthEnabled,
+}) {
+  const submitLabel = mode === 'login' ? 'Sign In' : otpStep ? 'Verify OTP' : 'Send OTP'
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (mode === 'login') {
+      onLogin()
+      return
+    }
+    onSignup()
+  }
+
   return (
     <div className="auth-screen">
-      <div className="auth-card auth-card-google-only">
-        <h1 className="auth-title">ViralAI</h1>
-        <p className="auth-subtitle">Generate structured content ideas</p>
-        <p className="auth-helper">Continue with your Gmail account. New users are created automatically on first sign-in.</p>
+      <div className="auth-split-card">
+        <section className="auth-split-main">
+          <h1 className="auth-title">Welcome</h1>
 
-        <div className="auth-google-wrap">
-          {googleAuthEnabled ? (
-            <GoogleLogin
-              onSuccess={(credentialResponse) => onGoogleLogin(credentialResponse?.credential)}
-              onError={() => alert('Google sign-in failed. Please try again.')}
-              text="continue_with"
-              shape="pill"
-              theme="outline"
-              width="320"
+          <div className="auth-tabs auth-tabs-split">
+            <button
+              type="button"
+              className={`auth-tab${mode === 'login' ? ' active' : ''}`}
+              onClick={() => onChangeMode('login')}
+            >
+              Login
+            </button>
+            <button
+              type="button"
+              className={`auth-tab${mode === 'signup' ? ' active' : ''}`}
+              onClick={() => onChangeMode('signup')}
+            >
+              Sign up
+            </button>
+          </div>
+
+          <form className="auth-form auth-form-split" onSubmit={handleSubmit}>
+            <input
+              className="auth-input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => onChangeEmail(e.target.value)}
+              required
+              autoComplete="email"
             />
-          ) : (
-            <p className="auth-google-disabled">Google sign-in is unavailable until VITE_GOOGLE_CLIENT_ID is configured.</p>
-          )}
-        </div>
+            <input
+              className="auth-input"
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => onChangePassword(e.target.value)}
+              required={mode === 'login' || !otpStep}
+              disabled={mode === 'signup' && otpStep}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            />
 
-        <p className="auth-footnote">Only Gmail accounts are allowed. Backend verification is required for every login.</p>
+            {mode === 'signup' && otpStep && (
+              <input
+                className="auth-input"
+                type="text"
+                placeholder="Enter 6-digit OTP"
+                value={otp}
+                onChange={(e) => onChangeOtp(e.target.value)}
+                required
+                inputMode="numeric"
+                maxLength={6}
+              />
+            )}
+
+            {mode === 'login' && <p className="auth-forgot-hint">Forgot password? (Coming soon)</p>}
+
+            <button type="submit" className={`auth-submit ${mode === 'login' ? 'auth-submit-login' : 'auth-submit-signup'}`} disabled={loading}>
+              {loading ? 'Please wait...' : submitLabel}
+            </button>
+          </form>
+
+          {otpMessage ? <p className="auth-otp-hint">{otpMessage}</p> : null}
+          {error ? <p className="auth-error">{error}</p> : null}
+
+          <div className="auth-divider"><span>OR</span></div>
+
+          <div className="auth-google-wrap auth-google-wrap-split">
+            {googleAuthEnabled ? (
+              <GoogleLogin
+                onSuccess={(credentialResponse) => onGoogleLogin(credentialResponse?.credential)}
+                onError={() => alert('Google sign-in failed. Please try again.')}
+                text="continue_with"
+                shape="pill"
+                theme="outline"
+                width="320"
+              />
+            ) : (
+              <p className="auth-google-disabled">Google sign-in is unavailable until VITE_GOOGLE_CLIENT_ID is configured.</p>
+            )}
+          </div>
+        </section>
+
+        <aside className="auth-split-side">
+          <p className="auth-side-title">Don't have an account?</p>
+          <p className="auth-side-title">Please Sign up!</p>
+          <button
+            type="button"
+            className="auth-side-action"
+            onClick={() => onChangeMode(mode === 'signup' ? 'login' : 'signup')}
+          >
+            {mode === 'signup' ? 'SIGN IN' : 'SIGN UP'}
+          </button>
+        </aside>
       </div>
+
+      <p className="auth-footnote auth-footnote-split">Only Gmail accounts are allowed. Google login and email signup both follow the same backend rule.</p>
     </div>
   )
 }
@@ -776,6 +879,14 @@ function App({ googleAuthEnabled = false }) {
   const [billingHistory, setBillingHistory] = useState([])
   const [billingLoading, setBillingLoading] = useState(false)
   const [billingError, setBillingError] = useState('')
+  const [authMode, setAuthMode] = useState('login')
+  const [authEmail, setAuthEmail] = useState('')
+  const [authPassword, setAuthPassword] = useState('')
+  const [authOtp, setAuthOtp] = useState('')
+  const [authOtpStep, setAuthOtpStep] = useState(false)
+  const [authOtpMessage, setAuthOtpMessage] = useState('')
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
 
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
@@ -1007,6 +1118,9 @@ function App({ googleAuthEnabled = false }) {
       return
     }
 
+    setAuthError('')
+    setAuthLoading(true)
+
     try {
       const res = await fetch(`${API_URL}/google-login`, {
         method: 'POST',
@@ -1017,14 +1131,112 @@ function App({ googleAuthEnabled = false }) {
       const data = await res.json()
       if (data.token) {
         completeLogin(data.token)
+        setAuthPassword('')
         return
       }
 
-      alert(data.error || 'Google login failed')
+      setAuthError(data.error || 'Google login failed')
     } catch (err) {
       console.error('Google login error:', err)
-      alert('Google login error. Please try again.')
+      setAuthError('Google login error. Please try again.')
+    } finally {
+      setAuthLoading(false)
     }
+  }
+
+  const handleLogin = async () => {
+    if (!authEmail || !authPassword) {
+      setAuthError('Email and password are required')
+      return
+    }
+
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.token) {
+        throw new Error(data.error || 'Login failed')
+      }
+
+      completeLogin(data.token)
+      setAuthPassword('')
+    } catch (err) {
+      setAuthError(err.message || 'Login failed')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleSignup = async () => {
+    if (!authEmail || !authPassword) {
+      setAuthError('Email and password are required')
+      return
+    }
+
+    if (authOtpStep && (!authOtp || authOtp.length !== 6)) {
+      setAuthError('Enter the 6-digit OTP sent to your email')
+      return
+    }
+
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      if (!authOtpStep) {
+        const otpRes = await fetch(`${API_URL}/signup/request-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: authEmail, password: authPassword }),
+        })
+
+        const otpData = await otpRes.json()
+        if (!otpRes.ok) {
+          throw new Error(otpData.error || 'Failed to send OTP')
+        }
+
+        setAuthOtpStep(true)
+        setAuthOtpMessage(
+          otpData.devOtp
+            ? `OTP sent. Dev OTP: ${otpData.devOtp}`
+            : 'OTP sent to your email. Enter it below to complete signup.',
+        )
+        return
+      }
+
+      const verifyRes = await fetch(`${API_URL}/signup/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, otp: authOtp }),
+      })
+
+      const verifyData = await verifyRes.json()
+      if (!verifyRes.ok || !verifyData.token) {
+        throw new Error(verifyData.error || 'OTP verification failed')
+      }
+
+      completeLogin(verifyData.token)
+      setAuthPassword('')
+      setAuthOtp('')
+      setAuthOtpStep(false)
+      setAuthOtpMessage('')
+    } catch (err) {
+      setAuthError(err.message || 'Signup failed')
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const handleChangeMode = (nextMode) => {
+    setAuthMode(nextMode)
+    setAuthError('')
+    setAuthOtp('')
+    setAuthOtpStep(false)
+    setAuthOtpMessage('')
   }
 
   const handleLogout = () => {
@@ -1358,7 +1570,26 @@ function App({ googleAuthEnabled = false }) {
   }
 
   if (!isLoggedIn) {
-    return <AuthScreen onGoogleLogin={handleGoogleLogin} googleAuthEnabled={googleAuthEnabled} />
+    return (
+      <AuthScreen
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        otp={authOtp}
+        otpStep={authOtpStep}
+        otpMessage={authOtpMessage}
+        loading={authLoading}
+        error={authError}
+        onChangeMode={handleChangeMode}
+        onChangeEmail={setAuthEmail}
+        onChangePassword={setAuthPassword}
+        onChangeOtp={setAuthOtp}
+        onLogin={handleLogin}
+        onSignup={handleSignup}
+        onGoogleLogin={handleGoogleLogin}
+        googleAuthEnabled={googleAuthEnabled}
+      />
+    )
   }
 
   const paymentBusy = paymentLoading || paymentVerifying

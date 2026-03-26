@@ -4,11 +4,13 @@ import { checkUsage, consumeUsage, getUsageSnapshot, resetUsageIfNeeded } from "
 import bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
 import User, { ensureProtectedPremiumUser, getEffectivePlan, isGmailEmail, isProtectedPremiumEmail, normalizeEmail } from "./models/User.js";
+import SignupOtp from "./models/SignupOtp.js";
 import Payment from "./models/Payment.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import mongoose from "mongoose";
@@ -103,6 +105,49 @@ const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const MONTHLY_PLAN_AMOUNT = 24900;
 const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
+const OTP_EXPIRY_MINUTES = 10;
+const OTP_MAX_ATTEMPTS = 5;
+
+const smtpPort = Number(process.env.SMTP_PORT || 587);
+const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+  ? nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number.isFinite(smtpPort) ? smtpPort : 587,
+    secure: smtpPort === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  })
+  : null;
+
+const hashSignupOtp = (email, otp) => {
+  const secret = process.env.JWT_SECRET || "otp-default-secret";
+  return crypto
+    .createHash("sha256")
+    .update(`${normalizeEmail(email)}:${String(otp)}:${secret}`)
+    .digest("hex");
+};
+
+const generateOtp = () => String(crypto.randomInt(100000, 1000000));
+
+const sendSignupOtpEmail = async (email, otp) => {
+  if (!mailTransport) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`DEV OTP for ${email}: ${otp}`);
+    }
+    return;
+  }
+
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+  await mailTransport.sendMail({
+    from: fromEmail,
+    to: email,
+    subject: "Your ViralAI signup OTP",
+    text: `Your OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
+    html: `<p>Your OTP is <strong>${otp}</strong>.</p><p>It expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`,
+  });
+};
 
 const validateGmailEmail = (email) => {
   if (!isGmailEmail(email)) {
@@ -1224,6 +1269,116 @@ app.post("/signup", async (req, res) => {
   } catch (err) {
     console.log("REAL SIGNUP ERROR:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/signup/request-otp", async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const { password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const validationError = validateGmailEmail(email);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    const otp = generateOtp();
+    const otpHash = hashSignupOtp(email, otp);
+    const passwordHash = await bcrypt.hash(password, 10);
+    const otpExpiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    await SignupOtp.findOneAndUpdate(
+      { email },
+      {
+        email,
+        passwordHash,
+        otpHash,
+        otpExpiresAt,
+        attempts: 0,
+      },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+
+    await sendSignupOtpEmail(email, otp);
+
+    const response = { message: "OTP sent to your email" };
+    if (!mailTransport && process.env.NODE_ENV !== "production") {
+      response.devOtp = otp;
+    }
+
+    return res.json(response);
+  } catch (err) {
+    console.log("SIGNUP REQUEST OTP ERROR:", err);
+    return res.status(500).json({ error: "Failed to send OTP" });
+  }
+});
+
+app.post("/signup/verify-otp", async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    const otp = String(req.body?.otp || "").trim();
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const pendingSignup = await SignupOtp.findOne({ email });
+    if (!pendingSignup) {
+      return res.status(400).json({ error: "No OTP request found for this email" });
+    }
+
+    if (pendingSignup.otpExpiresAt.getTime() < Date.now()) {
+      await SignupOtp.deleteOne({ _id: pendingSignup._id });
+      return res.status(400).json({ error: "OTP expired. Please request a new one" });
+    }
+
+    if (pendingSignup.attempts >= OTP_MAX_ATTEMPTS) {
+      await SignupOtp.deleteOne({ _id: pendingSignup._id });
+      return res.status(400).json({ error: "Too many incorrect attempts. Request a new OTP" });
+    }
+
+    const otpHash = hashSignupOtp(email, otp);
+    if (otpHash !== pendingSignup.otpHash) {
+      pendingSignup.attempts += 1;
+      await pendingSignup.save();
+      return res.status(400).json({ error: "Invalid OTP" });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      await SignupOtp.deleteOne({ _id: pendingSignup._id });
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    const user = new User({
+      email,
+      password: pendingSignup.passwordHash,
+      plan: isProtectedPremiumEmail(email) ? "premium" : "free",
+      usageCount: 0,
+      lastReset: new Date(),
+    });
+
+    await user.save();
+    await SignupOtp.deleteOne({ _id: pendingSignup._id });
+
+    const token = createAuthToken({ id: user._id });
+    return res.json({ token, plan: getEffectivePlan(user), email: user.email });
+  } catch (err) {
+    console.log("SIGNUP VERIFY OTP ERROR:", err);
+    return res.status(500).json({ error: "OTP verification failed" });
   }
 });
 
