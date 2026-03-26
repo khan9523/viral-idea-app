@@ -16,13 +16,54 @@ import { createAuthToken } from "./utils/auth.js";
 
 dotenv.config();
 
-console.log("ENV:", process.env.MONGO_URI);
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB Connected"))
   .catch((err) => console.log("MongoDB Error", err));
 
 const app = express();
-app.use(cors());
+
+const FRONTEND_URL = process.env.FRONTEND_URL
+  || (process.env.NODE_ENV === "production"
+    ? "https://viral-idea-app.vercel.app"
+    : "http://localhost:5173");
+
+const FRONTEND_URLS = String(process.env.FRONTEND_URLS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = Array.from(new Set([
+  FRONTEND_URL,
+  ...FRONTEND_URLS,
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]));
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser requests (curl, health checks) and same-origin.
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Not allowed by CORS"));
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
+
+app.use((err, _req, res, next) => {
+  if (err?.message === "Not allowed by CORS") {
+    return res.status(403).json({ error: "Origin not allowed" });
+  }
+
+  return next(err);
+});
 
 // Stripe webhook requires raw body to validate signature.
 app.use(["/stripe/webhook", "/webhook"], express.raw({ type: "application/json" }));
@@ -42,10 +83,6 @@ const client = new OpenAI({
 });
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
-const FRONTEND_URL = process.env.FRONTEND_URL
-  || (process.env.NODE_ENV === "production"
-    ? "https://viral-idea-app.vercel.app"
-    : "http://localhost:5173");
 const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
 const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
