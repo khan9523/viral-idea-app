@@ -46,19 +46,31 @@ Fill in these settings:
 - **Branch**: `main`
 - **Runtime**: `Node`
 - **Build Command**: `cd backend && npm install`
-- **Start Command**: `cd backend && node index.js`
+- **Start Command**: `cd backend && node server.js`
 
 ### Step 4: Add Environment Variables
 1. Scroll down to "Environment"
 2. Click "Add Environment Variable"
-3. Add two variables:
+3. Add these variables:
 
 ```
+Key: PORT
+Value: 5000
+
+Key: MONGO_URI
+Value: your_mongodb_connection_string
+
 Key: OPENAI_API_KEY
 Value: sk-proj-xxxxxxxxxxxxx (your actual key from OpenAI)
 
-Key: PORT
-Value: 3001
+Key: JWT_SECRET
+Value: replace_with_a_long_random_secret
+
+Key: GOOGLE_CLIENT_ID
+Value: your_google_web_client_id.apps.googleusercontent.com
+
+Key: FRONTEND_URL
+Value: https://your-vercel-app.vercel.app
 ```
 
 4. Click "Create Web Service"
@@ -94,25 +106,15 @@ Value: 3001
 
 **Test**: Click the deployment link - you should see the Viral Idea App! 🎉
 
-### Step 4: Update Backend URL
-Now connect frontend to your deployed backend:
+### Step 4: Add Frontend Environment Variables
+In Vercel project settings, add:
 
-1. In your local code, edit `frontend/src/App.jsx`
-2. Find line with: `fetch('http://localhost:3001/generate'`
-3. Replace with your Render URL:
-   ```javascript
-   fetch('https://viral-idea-backend.onrender.com/generate', {
-   ```
-   (Replace with YOUR Render URL from Step 3 above)
+```
+VITE_API_URL=https://your-render-backend.onrender.com
+VITE_GOOGLE_CLIENT_ID=your_google_web_client_id.apps.googleusercontent.com
+```
 
-4. Save and push to GitHub:
-   ```bash
-   git add .
-   git commit -m "Update backend URL for production"
-   git push
-   ```
-
-5. Vercel will **auto-deploy** your changes! 🚀
+Redeploy after saving the variables.
 
 ---
 
@@ -120,10 +122,10 @@ Now connect frontend to your deployed backend:
 
 ### Test Live App
 1. Go to your Vercel deployment URL
-2. Select category (e.g., "Comedy")
-3. Enter prompt: "YouTube Shorts ideas"
-4. Click "Generate Idea"
-5. Should see AI-generated ideas!
+2. Confirm the Google sign-in button is visible
+3. Sign in with a Gmail account
+4. Enter prompt: "YouTube Shorts ideas"
+5. Should see AI-generated ideas
 
 ### Test Features
 - ❤️ Click to save favorite
@@ -135,14 +137,19 @@ Now connect frontend to your deployed backend:
 ### If Things Don't Work
 
 **"API unavailable" error?**
-- Check Render backend URL is correct in App.jsx
+- Check `VITE_API_URL` in Vercel
 - Verify OPENAI_API_KEY is set in Render
 - Check Render logs: https://dashboard.render.com
 
 **"Can't connect to backend"?**
-- Verify URL in App.jsx matches your Render URL
+- Verify `VITE_API_URL` matches your Render URL
 - Check CORS is enabled (it is in your code ✅)
 - Check both servers are running
+
+**"Google sign-in unavailable"?**
+- Verify `VITE_GOOGLE_CLIENT_ID` is set in Vercel
+- Verify `GOOGLE_CLIENT_ID` is set in Render
+- Check your Google Cloud OAuth app allowed origins
 
 ---
 

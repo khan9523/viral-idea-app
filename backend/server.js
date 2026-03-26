@@ -2,8 +2,8 @@ import Chat from "./models/Chat.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { checkUsage, consumeUsage, getUsageSnapshot, resetUsageIfNeeded } from "./middleware/usage.js";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
-import User from "./models/User.js";
+import { OAuth2Client } from "google-auth-library";
+import User, { ensureProtectedPremiumUser, getEffectivePlan, isGmailEmail, isProtectedPremiumEmail, normalizeEmail } from "./models/User.js";
 import Payment from "./models/Payment.js";
 import express from "express";
 import cors from "cors";
@@ -12,6 +12,7 @@ import OpenAI from "openai";
 import mongoose from "mongoose";
 import Stripe from "stripe";
 import crypto from "crypto";
+import { createAuthToken } from "./utils/auth.js";
 
 dotenv.config();
 
@@ -49,6 +50,40 @@ const STRIPE_PRICE_ID = process.env.STRIPE_PRICE_ID;
 const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 const MONTHLY_PLAN_AMOUNT = 24900;
+const googleClient = process.env.GOOGLE_CLIENT_ID ? new OAuth2Client(process.env.GOOGLE_CLIENT_ID) : null;
+
+const validateGmailEmail = (email) => {
+  if (!isGmailEmail(email)) {
+    return "Only Gmail accounts are allowed";
+  }
+
+  return null;
+};
+
+const verifyGoogleCredential = async (token) => {
+  if (!googleClient || !process.env.GOOGLE_CLIENT_ID) {
+    throw new Error("GOOGLE_CLIENT_ID is not configured");
+  }
+
+  const ticket = await googleClient.verifyIdToken({
+    idToken: token,
+    audience: process.env.GOOGLE_CLIENT_ID,
+  });
+
+  const payload = ticket.getPayload();
+  const email = normalizeEmail(payload?.email);
+
+  if (!payload?.email_verified) {
+    throw new Error("Google account email is not verified");
+  }
+
+  const validationError = validateGmailEmail(email);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  return { email };
+};
 const resolveRazorpayConfig = () => {
   const keyId = process.env.RAZORPAY_KEY_ID
     || process.env.RAZORPAY_KEY
@@ -634,12 +669,13 @@ app.get("/profile", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    await ensureProtectedPremiumUser(dbUser);
     await resetUsageIfNeeded(dbUser);
     const usage = getUsageSnapshot(dbUser);
 
     res.json({
       email: dbUser.email,
-      plan: dbUser.plan,
+      plan: getEffectivePlan(dbUser),
       billingStatus: dbUser.billingStatus,
       subscriptionId: dbUser.subscriptionId,
       currentPeriodEnd: dbUser.currentPeriodEnd,
@@ -691,7 +727,9 @@ const createSubscriptionHandler = async (req, res) => {
       return res.status(500).json({ error: "Stripe is not configured" });
     }
 
-    if (user.subscriptionId && user.plan === "premium") {
+    await ensureProtectedPremiumUser(user);
+
+    if (user.subscriptionId && getEffectivePlan(user) === "premium") {
       return res.status(400).json({ error: "An active subscription already exists" });
     }
 
@@ -786,6 +824,8 @@ const verifyRazorpayPaymentHandler = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    await ensureProtectedPremiumUser(user);
+
     const amount = await fetchRazorpayOrderAmount(razorpay_order_id);
 
     await Payment.updateOne(
@@ -814,7 +854,7 @@ const verifyRazorpayPaymentHandler = async (req, res) => {
     return res.json({
       success: true,
       message: "Payment verified successfully",
-      plan: user.plan,
+      plan: getEffectivePlan(user),
       usage,
     });
   } catch (err) {
@@ -839,6 +879,8 @@ app.post("/billing/cancel-subscription", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    await ensureProtectedPremiumUser(user);
+
     if (!user.subscriptionId) {
       return res.status(400).json({ error: "No active subscription found" });
     }
@@ -851,7 +893,13 @@ app.post("/billing/cancel-subscription", authMiddleware, async (req, res) => {
     user.billingStatus = "canceled";
     await user.save();
 
-    res.json({ message: "Subscription canceled", plan: user.plan, billingStatus: user.billingStatus });
+    res.json({
+      message: isProtectedPremiumEmail(user.email)
+        ? "Protected premium account remains premium"
+        : "Subscription canceled",
+      plan: getEffectivePlan(user),
+      billingStatus: user.billingStatus,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -887,7 +935,7 @@ const handleStripeWebhook = async (req, res) => {
           await user.save();
         }
 
-        if (user && session.mode !== "subscription" && user.plan !== "premium") {
+        if (user && session.mode !== "subscription" && getEffectivePlan(user) !== "premium") {
           user.plan = "premium";
           await user.save();
         }
@@ -1003,6 +1051,8 @@ app.post("/billing/verify-session", authMiddleware, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    await ensureProtectedPremiumUser(user);
+
     const refId = session.client_reference_id || session.metadata?.userId;
     if (String(refId) !== String(user._id)) {
       return res.status(403).json({ error: "Payment session does not match user" });
@@ -1011,7 +1061,7 @@ app.post("/billing/verify-session", authMiddleware, async (req, res) => {
     user.plan = "premium";
     await user.save();
 
-    res.json({ message: "Upgraded to premium", plan: user.plan });
+    res.json({ message: "Upgraded to premium", plan: getEffectivePlan(user) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1037,6 +1087,7 @@ app.get("/billing/stats", authMiddleware, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: "User not found" });
 
+    await ensureProtectedPremiumUser(user);
     await resetUsageIfNeeded(user);
 
     const [payments] = await Promise.all([
@@ -1049,7 +1100,7 @@ app.get("/billing/stats", authMiddleware, async (req, res) => {
     const sortedPayments = [...payments].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     res.json({
-      plan: user.plan,
+      plan: getEffectivePlan(user),
       billingStatus: user.billingStatus,
       subscriptionId: user.subscriptionId,
       currentPeriodEnd: user.currentPeriodEnd,
@@ -1087,10 +1138,16 @@ app.post("/generate-script", authMiddleware, async (req, res) => {
 
 app.post("/signup", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body?.email);
+    const { password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const validationError = validateGmailEmail(email);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
     }
 
     const existingUser = await User.findOne({ email });
@@ -1104,7 +1161,7 @@ app.post("/signup", async (req, res) => {
     const newUser = new User({
       email,
       password: hashedPassword,
-      plan: "free",
+      plan: isProtectedPremiumEmail(email) ? "premium" : "free",
       usageCount: 0,
       lastReset: new Date(),
     });
@@ -1120,10 +1177,16 @@ app.post("/signup", async (req, res) => {
 
 app.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const email = normalizeEmail(req.body?.email);
+    const { password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const validationError = validateGmailEmail(email);
+    if (validationError) {
+      return res.status(400).json({ error: validationError });
     }
 
     const user = await User.findOne({ email });
@@ -1132,22 +1195,59 @@ app.post("/login", async (req, res) => {
       return res.status(400).json({ error: "User not found" });
     }
 
+    await ensureProtectedPremiumUser(user);
+
+    if (!user.password) {
+      return res.status(400).json({ error: "This account uses Google sign-in" });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res.status(400).json({ error: "Wrong password" });
     }
 
-    const token = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = createAuthToken({ id: user._id });
 
-    res.json({ token, plan: user.plan });
+    res.json({ token, plan: getEffectivePlan(user) });
   } catch (err) {
     console.log("REAL LOGIN ERROR:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/google-login", async (req, res) => {
+  try {
+    const googleToken = String(req.body?.token || "").trim();
+
+    if (!googleToken) {
+      return res.status(400).json({ error: "Google token is required" });
+    }
+
+    const { email } = await verifyGoogleCredential(googleToken);
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      user = new User({
+        email,
+        password: null,
+        plan: isProtectedPremiumEmail(email) ? "premium" : "free",
+        usageCount: 0,
+        lastReset: new Date(),
+      });
+
+      await user.save();
+    } else {
+      await ensureProtectedPremiumUser(user);
+    }
+
+    const token = createAuthToken({ id: user._id });
+
+    res.json({ token, plan: getEffectivePlan(user), email: user.email });
+  } catch (err) {
+    console.log("GOOGLE LOGIN ERROR:", err);
+    res.status(400).json({ error: err.message || "Google login failed" });
   }
 });
 

@@ -1,16 +1,15 @@
 # 💡 Viral Idea App
 
-Generate viral social media ideas using AI! Create YouTube Shorts, TikTok videos, Instagram Reels, and more with AI-powered suggestions.
+Generate viral social media ideas using AI, with Gmail-only authentication, Google sign-in, chat history, and premium plan support.
 
 ## ✨ Features
 
-- 🚀 **AI-Powered Idea Generation** - Uses GPT-4 to create unique, viral-worthy ideas
-- 🏷️ **8 Content Categories** - Comedy, Educational, Inspirational, Trending, Lifestyle, Tech, Business, General
-- 💾 **Save Favorites** - Bookmark your favorite ideas (stored in browser)
-- 📄 **Export Ideas** - Download ideas as JSON or Text
-- 🔄 **Regenerate** - Get alternative suggestions for the same prompt
-- 📱 **Mobile Responsive** - Works seamlessly on all devices
-- 🌍 **Free to Use** - Just need an OpenAI API key for AI features
+- 🚀 AI-powered viral idea generation
+- 🔐 Gmail-only authentication
+- 🟢 Google OAuth sign-in with backend token verification
+- 💬 Persistent chat history per user
+- 💎 Free and premium plans
+- 📱 Mobile responsive frontend
 
 ## 🎯 Live Demo
 
@@ -27,8 +26,10 @@ Generate viral social media ideas using AI! Create YouTube Shorts, TikTok videos
 
 **Backend:**
 - Node.js + Express
+- MongoDB + Mongoose
+- JWT authentication
+- Google token verification with `google-auth-library`
 - OpenAI API (GPT-4o-mini)
-- CORS enabled
 
 ## 📦 Installation
 
@@ -47,10 +48,8 @@ npm run dev    # Runs on http://localhost:5173
 # Backend Setup (in another terminal)
 cd backend
 npm install
-# Create .env file with:
-#   OPENAI_API_KEY=your_key_here
-#   PORT=3001
-node index.js  # Runs on http://localhost:3001
+# Copy .env.example to .env and fill values
+npm start  # Runs on http://localhost:5000
 ```
 
 ## 🚀 Deployment
@@ -62,14 +61,14 @@ node index.js  # Runs on http://localhost:3001
 2. Go to https://vercel.com
 3. Import your repository
 4. Deploy (Vercel auto-detects Vite)
-5. Update `API_URL` in frontend after backend is deployed
+5. Set `VITE_API_URL` and `VITE_GOOGLE_CLIENT_ID` in Vercel after backend is deployed
 
 **Backend Deployment:**
 1. Go to https://render.com
 2. Create Web Service
 3. Connect GitHub repo
-4. Set Start Command: `node backend/index.js`
-5. Add Environment Variable: `OPENAI_API_KEY`
+4. Set Start Command: `cd backend && node server.js`
+5. Add environment variables from [backend/.env.example](backend/.env.example)
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions.
 
@@ -126,8 +125,17 @@ viral-idea-app/
 
 ## 🔌 API Endpoints
 
+### POST `/google-login`
+Exchange a verified Google credential for an app JWT.
+
+### POST `/login`
+Password login for Gmail accounts.
+
+### POST `/signup`
+Password signup for Gmail accounts.
+
 ### GET `/`
-Health check endpoint
+Health check endpoint.
 ```
 Response: {"message":"Backend working"}
 ```
@@ -156,13 +164,17 @@ Response:
 
 ### Backend (.env)
 ```
+PORT=5000
+MONGO_URI=mongodb://localhost:27017/viral-idea-app
 OPENAI_API_KEY=sk-proj-xxxxxxxxxxxxx
-PORT=3001
+JWT_SECRET=replace-with-a-long-random-secret
+GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 ```
 
-### Frontend (.env.local) - Optional
+### Frontend (.env.local)
 ```
 VITE_API_URL=https://your-backend-domain.com
+VITE_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com
 ```
 
 ## 📱 Mobile Optimization
@@ -195,7 +207,7 @@ VITE_API_URL=https://your-backend-domain.com
 
 ## 🎯 Future Enhancements
 
-- [ ] User authentication & accounts
+- [x] User authentication & accounts
 - [ ] Idea sharing & collaboration
 - [ ] Advanced editing & customization
 - [ ] Video preview generation

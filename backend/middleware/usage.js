@@ -1,4 +1,4 @@
-import User from "../models/User.js";
+import User, { ensureProtectedPremiumUser, getEffectivePlan } from "../models/User.js";
 
 const DAILY_FREE_LIMIT = 5;
 
@@ -26,13 +26,14 @@ export const checkUsage = async (req, res, next) => {
       return res.status(404).json({ error: "User not found" });
     }
 
+    await ensureProtectedPremiumUser(dbUser);
     await resetUsageIfNeeded(dbUser);
 
-    if (dbUser.plan === "free" && dbUser.usageCount >= DAILY_FREE_LIMIT) {
+    if (getEffectivePlan(dbUser) === "free" && dbUser.usageCount >= DAILY_FREE_LIMIT) {
       return res.status(403).json({
         error: "Daily limit reached. Upgrade to premium.",
         code: "LIMIT_EXCEEDED",
-        plan: dbUser.plan,
+        plan: getEffectivePlan(dbUser),
         usageCount: dbUser.usageCount,
         remaining: 0,
       });
@@ -49,22 +50,28 @@ export const checkUsage = async (req, res, next) => {
 export const checkUsageLimit = checkUsage;
 
 export const consumeUsage = async (user) => {
-  if (user.plan === "free") {
+  const plan = getEffectivePlan(user);
+
+  if (plan === "free") {
     user.usageCount += 1;
     await user.save();
   }
 
   return {
-    plan: user.plan,
+    plan,
     usageCount: user.usageCount,
-    remaining: user.plan === "premium" ? null : Math.max(0, DAILY_FREE_LIMIT - user.usageCount),
-    dailyLimit: user.plan === "premium" ? null : DAILY_FREE_LIMIT,
+    remaining: plan === "premium" ? null : Math.max(0, DAILY_FREE_LIMIT - user.usageCount),
+    dailyLimit: plan === "premium" ? null : DAILY_FREE_LIMIT,
   };
 };
 
-export const getUsageSnapshot = (user) => ({
-  plan: user.plan,
-  usageCount: user.usageCount,
-  remaining: user.plan === "premium" ? null : Math.max(0, DAILY_FREE_LIMIT - user.usageCount),
-  dailyLimit: user.plan === "premium" ? null : DAILY_FREE_LIMIT,
-});
+export const getUsageSnapshot = (user) => {
+  const plan = getEffectivePlan(user);
+
+  return {
+    plan,
+    usageCount: user.usageCount,
+    remaining: plan === "premium" ? null : Math.max(0, DAILY_FREE_LIMIT - user.usageCount),
+    dailyLimit: plan === "premium" ? null : DAILY_FREE_LIMIT,
+  };
+};

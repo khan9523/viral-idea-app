@@ -1,5 +1,7 @@
 # 🚀 Viral Idea App - Deployment Guide
 
+This app now requires Google OAuth and JWT configuration in addition to your database and OpenAI settings.
+
 ## ✅ Features Implemented
 
 1. ✅ **Category Selection** - 8 different content categories (Comedy, Educational, etc.)
@@ -60,15 +62,19 @@ const res = await fetch('https://your-backend-url.com/generate', {
    - **Name**: `viral-idea-backend`
    - **Runtime**: `Node`
    - **Build Command**: `npm install`
-   - **Start Command**: `node backend/index.js`
+   - **Start Command**: `cd backend && node server.js`
    - **Region**: Choose closest to you
 
 **Step 3: Add Environment Variables**
 1. In Render dashboard, go to "Environment"
 2. Add:
    ```
+   PORT = 5000
+   MONGO_URI = your_mongodb_connection_string
    OPENAI_API_KEY = your_actual_key_here
-   PORT = 3001
+   JWT_SECRET = replace_with_a_long_random_secret
+   GOOGLE_CLIENT_ID = your_google_web_client_id.apps.googleusercontent.com
+   FRONTEND_URL = https://your-vercel-app.vercel.app
    ```
 3. Click "Create Web Service"
 
@@ -127,9 +133,10 @@ OPENAI_API_KEY=sk-proj-xxxxx
 PORT=3001
 ```
 
-**Frontend (.env file):** (optional, for non-localhost)
+**Frontend (.env file):**
 ```
 VITE_API_URL=https://your-backend-domain.com
+VITE_GOOGLE_CLIENT_ID=your_google_web_client_id.apps.googleusercontent.com
 ```
 
 ---
@@ -139,9 +146,9 @@ VITE_API_URL=https://your-backend-domain.com
 ```
 viral-idea-app/
 ├── backend/
-│   ├── index.js          ← Main server file
+│   ├── server.js         ← Main server file
 │   ├── package.json
-│   ├── .env              ← Keep OPENAI_API_KEY here
+│   ├── .env              ← Keep secrets here
 │   └── node_modules/
 ├── frontend/
 │   ├── src/
@@ -162,14 +169,19 @@ After deploying, test:
 1. **Health Check**: Visit `https://your-backend-url.com/` 
    - Should see: `{"message":"Backend working"}`
 
-2. **Generate with Category**:
+2. **Google Sign-In**:
+   - Confirm the frontend shows the Google button
+   - Sign in with a Gmail account
+   - Verify that the backend returns a JWT and the app loads chats/profile
+
+3. **Generate with Category**:
    ```bash
    curl -X POST https://your-backend-url.com/generate \
      -H "Content-Type: application/json" \
      -d '{"prompt":"YouTube ideas","category":"Comedy"}'
    ```
 
-3. **Frontend**: Visit `https://your-frontend-url.com`
+4. **Frontend**: Visit `https://your-frontend-url.com`
    - Try generating an idea
    - Test saving to favorites
    - Test export functionality
@@ -181,6 +193,15 @@ After deploying, test:
 **CORS Error?**
 - Backend has CORS enabled ✅
 - Check that frontend URL is correct in backend deployment
+
+**Google button missing?**
+- Verify `VITE_GOOGLE_CLIENT_ID` is set in Vercel
+- Verify `GOOGLE_CLIENT_ID` is set in the backend
+- Confirm your Google OAuth client allows the deployed frontend origin
+
+**JWT errors?**
+- Verify `JWT_SECRET` exists in backend environment variables
+- Restart the backend after updating env vars
 
 **API Key Error?**
 - Verify OPENAI_API_KEY in environment variables

@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import { verifyAuthToken } from "../utils/auth.js";
 
 export const authMiddleware = (req, res, next) => {
   try {
@@ -8,7 +8,7 @@ export const authMiddleware = (req, res, next) => {
       return res.status(401).json({ error: "No token" });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "secret123");
+    const decoded = verifyAuthToken(token);
 
     req.user = decoded; // contains user id
 

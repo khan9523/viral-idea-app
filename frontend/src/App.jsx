@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { GoogleLogin } from '@react-oauth/google'
 import './App.css'
 
 const API_URL =
@@ -618,49 +619,30 @@ function ThinkingBubble() {
   )
 }
 
-function AuthScreen({ onLogin, onSignup }) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [mode, setMode] = useState('login')
-
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    if (mode === 'login') onLogin(email, password)
-    else onSignup(email, password)
-  }
-
+function AuthScreen({ onGoogleLogin, googleAuthEnabled }) {
   return (
     <div className="auth-screen">
-      <div className="auth-card">
+      <div className="auth-card auth-card-google-only">
         <h1 className="auth-title">ViralAI</h1>
         <p className="auth-subtitle">Generate structured content ideas</p>
+        <p className="auth-helper">Continue with your Gmail account. New users are created automatically on first sign-in.</p>
 
-        <div className="auth-tabs">
-          <button className={`auth-tab${mode === 'login' ? ' active' : ''}`} onClick={() => setMode('login')}>Login</button>
-          <button className={`auth-tab${mode === 'signup' ? ' active' : ''}`} onClick={() => setMode('signup')}>Sign up</button>
+        <div className="auth-google-wrap">
+          {googleAuthEnabled ? (
+            <GoogleLogin
+              onSuccess={(credentialResponse) => onGoogleLogin(credentialResponse?.credential)}
+              onError={() => alert('Google sign-in failed. Please try again.')}
+              text="continue_with"
+              shape="pill"
+              theme="outline"
+              width="320"
+            />
+          ) : (
+            <p className="auth-google-disabled">Google sign-in is unavailable until VITE_GOOGLE_CLIENT_ID is configured.</p>
+          )}
         </div>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <input
-            className="auth-input"
-            type="email"
-            placeholder="Email address"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <input
-            className="auth-input"
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button className={`auth-submit ${mode === 'login' ? 'auth-submit-login' : 'auth-submit-signup'}`} type="submit">
-            {mode === 'login' ? 'Login' : 'Create account'}
-          </button>
-        </form>
+        <p className="auth-footnote">Only Gmail accounts are allowed. Backend verification is required for every login.</p>
       </div>
     </div>
   )
@@ -758,7 +740,7 @@ function PaymentSuccessModal({ open, onClose }) {
   )
 }
 
-function App() {
+function App({ googleAuthEnabled = false }) {
   const [activePage, setActivePage] = useState('chat')
   const [currentChatId, setCurrentChatId] = useState(null)
   const [chats, setChats] = useState([])
@@ -834,9 +816,7 @@ function App() {
     setCheckingAuth(false)
   }, [])
 
-  useEffect(() => {
-    if (!isLoggedIn) return
-
+  const handlePaymentRedirect = useEffectEvent(() => {
     const params = new URLSearchParams(window.location.search)
     const paymentStatus = params.get('payment')
 
@@ -849,6 +829,12 @@ function App() {
       url.searchParams.delete('payment')
       window.history.replaceState({}, '', url)
     }
+  })
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+
+    handlePaymentRedirect()
   }, [isLoggedIn])
 
   useEffect(() => {
@@ -859,6 +845,14 @@ function App() {
     'Content-Type': 'application/json',
     Authorization: 'Bearer ' + localStorage.getItem('token'),
   })
+
+  const completeLogin = (token) => {
+    localStorage.setItem('token', token)
+    setIsLoggedIn(true)
+    fetchChats()
+    fetchUsage()
+    fetchProfile()
+  }
 
   const fetchUsage = async () => {
     const token = localStorage.getItem('token')
@@ -1007,46 +1001,29 @@ function App() {
     }
   }
 
-  const handleLogin = async (email, password) => {
+  const handleGoogleLogin = async (googleToken) => {
+    if (!googleToken) {
+      alert('Google sign-in did not return a token')
+      return
+    }
+
     try {
-      const res = await fetch(`${API_URL}/login`, {
+      const res = await fetch(`${API_URL}/google-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ token: googleToken }),
       })
 
       const data = await res.json()
       if (data.token) {
-        localStorage.setItem('token', data.token)
-        setIsLoggedIn(true)
-        fetchChats()
-        fetchUsage()
-        fetchProfile()
-      } else {
-        alert(data.error || 'Login failed')
+        completeLogin(data.token)
+        return
       }
-    } catch (err) {
-      console.error('Login error:', err)
-      alert('Login error. Please try again.')
-    }
-  }
 
-  const handleSignup = async (email, password) => {
-    try {
-      const res = await fetch(`${API_URL}/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        alert(data.message || 'Account created! Please log in.')
-      } else {
-        alert(data.error || 'Signup failed')
-      }
+      alert(data.error || 'Google login failed')
     } catch (err) {
-      console.error('Signup error:', err)
-      alert('Network error')
+      console.error('Google login error:', err)
+      alert('Google login error. Please try again.')
     }
   }
 
@@ -1381,7 +1358,7 @@ function App() {
   }
 
   if (!isLoggedIn) {
-    return <AuthScreen onLogin={handleLogin} onSignup={handleSignup} />
+    return <AuthScreen onGoogleLogin={handleGoogleLogin} googleAuthEnabled={googleAuthEnabled} />
   }
 
   const paymentBusy = paymentLoading || paymentVerifying
