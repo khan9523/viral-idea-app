@@ -12,14 +12,20 @@ jobs:
       - name: Ping Render health endpoint
         env:
           TARGET_URL: ${{ secrets.RENDER_HEALTHCHECK_URL }}
+          TARGET_URL_VAR: ${{ vars.RENDER_HEALTHCHECK_URL }}
         run: |
-          if [ -z "$TARGET_URL" ]; then
-            echo "RENDER_HEALTHCHECK_URL is not set"
-            exit 1
+          url="$TARGET_URL"
+          if [ -z "$url" ]; then
+            url="$TARGET_URL_VAR"
           fi
 
-          echo "Pinging $TARGET_URL"
-          status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$TARGET_URL")
+          if [ -z "$url" ]; then
+            echo "RENDER_HEALTHCHECK_URL is not configured in secrets/vars. Skipping keep-alive ping."
+            exit 0
+          fi
+
+          echo "Pinging $url"
+          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 3 --retry-connrefused --max-time 20 "$url")
           echo "HTTP $status"
 
           case "$status" in
