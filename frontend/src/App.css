@@ -591,28 +591,41 @@ body {
   letter-spacing: -0.01em;
 }
 
-.auth-otp-actions {
+.auth-otp-resend-row {
   display: flex;
-  justify-content: flex-end;
-  margin-top: -0.1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(201, 168, 76, 0.05);
+  border: 1px solid rgba(201, 168, 76, 0.18);
+}
+.auth-otp-resend-hint {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  flex: 1;
 }
 .auth-resend-btn {
-  border: 1px solid rgba(201, 168, 76, 0.4);
-  background: rgba(201, 168, 76, 0.08);
-  color: var(--text-primary);
+  flex-shrink: 0;
+  border: 1px solid rgba(201, 168, 76, 0.55);
+  background: rgba(201, 168, 76, 0.12);
+  color: #c9a84c;
   border-radius: 999px;
-  padding: 0.35rem 0.8rem;
-  font-size: 0.78rem;
+  padding: 0.38rem 1rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  white-space: nowrap;
 }
 .auth-resend-btn:hover:not(:disabled) {
-  border-color: rgba(201, 168, 76, 0.72);
-  background: rgba(201, 168, 76, 0.16);
+  border-color: rgba(201, 168, 76, 0.85);
+  background: rgba(201, 168, 76, 0.22);
+  color: #e0c06e;
 }
 .auth-resend-btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 .sidebar-new-chat-wrap {

@@ -696,33 +696,34 @@ function AuthScreen({
             />
 
             {mode === 'signup' && otpStep && (
-              <input
-                className="auth-input"
-                type="text"
-                placeholder="Enter 6-digit OTP"
-                value={otp}
-                onChange={(e) => onChangeOtp(e.target.value)}
-                required
-                inputMode="numeric"
-                maxLength={6}
-              />
-            )}
-
-            {mode === 'signup' && otpStep && (
-              <div className="auth-otp-actions">
-                <button
-                  type="button"
-                  className="auth-resend-btn"
-                  onClick={onResendOtp}
-                  disabled={loading || resendLoading || resendCooldown > 0}
-                >
-                  {resendLoading
-                    ? 'Resending...'
-                    : resendCooldown > 0
-                    ? `Resend OTP in ${resendCooldown}s`
-                    : 'Resend OTP'}
-                </button>
-              </div>
+              <>
+                <input
+                  className="auth-input auth-otp-input"
+                  type="text"
+                  placeholder="Enter 6-digit OTP"
+                  value={otp}
+                  onChange={(e) => onChangeOtp(e.target.value)}
+                  required
+                  inputMode="numeric"
+                  maxLength={6}
+                  autoFocus
+                />
+                <div className="auth-otp-resend-row">
+                  <span className="auth-otp-resend-hint">
+                    {resendCooldown > 0
+                      ? `Didn't receive it? Resend in ${resendCooldown}s`
+                      : "Didn't receive it?"}
+                  </span>
+                  <button
+                    type="button"
+                    className="auth-resend-btn"
+                    onClick={onResendOtp}
+                    disabled={loading || resendLoading || resendCooldown > 0}
+                  >
+                    {resendLoading ? 'Sending…' : 'Resend OTP'}
+                  </button>
+                </div>
+              </>
             )}
 
             {mode === 'login' && <p className="auth-forgot-hint">Forgot password? (Coming soon)</p>}

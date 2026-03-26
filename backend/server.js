@@ -11,6 +11,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import mongoose from "mongoose";
@@ -110,6 +111,12 @@ const OTP_MAX_ATTEMPTS = 5;
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
 const OTP_MAX_RESENDS = 5;
 
+// Resend (primary — just set RESEND_API_KEY)
+const resendClient = process.env.RESEND_API_KEY
+  ? new Resend(process.env.RESEND_API_KEY)
+  : null;
+
+// Nodemailer SMTP (fallback — set all SMTP_* vars)
 const smtpPort = Number(process.env.SMTP_PORT || 587);
 const smtpSecure = String(process.env.SMTP_SECURE || "").trim().toLowerCase() === "true";
 const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
@@ -127,10 +134,14 @@ const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.
   })
   : null;
 
-if (mailTransport) {
+if (resendClient) {
+  console.log("Email: using Resend API");
+} else if (mailTransport) {
   mailTransport.verify()
-    .then(() => console.log("SMTP transport verified"))
-    .catch((err) => console.log("SMTP verify failed:", err?.message || err));
+    .then(() => console.log("Email: SMTP transport verified"))
+    .catch((err) => console.log("Email: SMTP verify failed:", err?.message || err));
+} else {
+  console.log("Email: no email provider configured — OTP will be dev-only");
 }
 
 const hashSignupOtp = (email, otp) => {
@@ -152,23 +163,63 @@ const getOtpCooldownSecondsRemaining = (lastSentAt) => {
   return Math.max(0, OTP_RESEND_COOLDOWN_SECONDS - elapsedSeconds);
 };
 
+const buildOtpHtml = (otp) => `
+<!DOCTYPE html><html><body style="font-family:sans-serif;background:#0f0f1c;color:#eaeaf5;padding:40px 0;">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+  <table width="480" cellpadding="0" cellspacing="0" style="background:#151528;border-radius:16px;padding:40px;border:1px solid #1c1c30;">
+    <tr><td align="center" style="padding-bottom:24px;">
+      <p style="margin:0;font-size:22px;font-weight:900;background:linear-gradient(135deg,#c9a84c,#f0c060);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">ViralAI</p>
+    </td></tr>
+    <tr><td align="center">
+      <p style="margin:0 0 8px;font-size:16px;color:#eaeaf5;">Your verification code</p>
+      <p style="margin:16px 0;font-size:40px;font-weight:900;letter-spacing:10px;color:#f0c060;">${otp}</p>
+      <p style="margin:0;font-size:14px;color:#7070a0;">Expires in ${OTP_EXPIRY_MINUTES} minutes. Do not share this code.</p>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`;
+
 const sendSignupOtpEmail = async (email, otp) => {
-  if (!mailTransport) {
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`DEV OTP for ${email}: ${otp}`);
-      return;
+  const subject = "Your ViralAI verification code";
+  const text = `Your ViralAI OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
+  const html = buildOtpHtml(otp);
+
+  // --- Primary: Resend API ---
+  if (resendClient) {
+    const fromEmail = process.env.RESEND_FROM || "ViralAI <onboarding@resend.dev>";
+    const { error } = await resendClient.emails.send({
+      from: fromEmail,
+      to: email,
+      subject,
+      text,
+      html,
+    });
+    if (error) {
+      throw new Error(`Resend error: ${error.message}`);
     }
-    throw new Error("OTP email service is not configured");
+    return;
   }
 
-  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
-  await mailTransport.sendMail({
-    from: `ViralAI <${fromEmail}>`,
-    to: email,
-    subject: "Your ViralAI verification code",
-    text: `Your ViralAI OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`,
-    html: `<p>Your ViralAI OTP is <strong style="font-size:18px">${otp}</strong>.</p><p>It expires in ${OTP_EXPIRY_MINUTES} minutes.</p>`,
-  });
+  // --- Fallback: nodemailer SMTP ---
+  if (mailTransport) {
+    const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+    await mailTransport.sendMail({
+      from: `ViralAI <${fromEmail}>`,
+      to: email,
+      subject,
+      text,
+      html,
+    });
+    return;
+  }
+
+  // --- Dev mode: log to console ---
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`DEV OTP for ${email}: ${otp}`);
+    return;
+  }
+
+  throw new Error("OTP email service is not configured");
 };
 
 const validateGmailEmail = (email) => {
