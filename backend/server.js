@@ -183,40 +183,57 @@ const sendSignupOtpEmail = async (email, otp) => {
   const subject = "Your ViralAI verification code";
   const text = `Your ViralAI OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
   const html = buildOtpHtml(otp);
+  const providerErrors = [];
 
   // --- Primary: Resend API ---
   if (resendClient) {
-    const fromEmail = process.env.RESEND_FROM || "ViralAI <onboarding@resend.dev>";
-    const { error } = await resendClient.emails.send({
-      from: fromEmail,
-      to: email,
-      subject,
-      text,
-      html,
-    });
-    if (error) {
-      throw new Error(`Resend error: ${error.message}`);
+    try {
+      const fromEmail = process.env.RESEND_FROM || "ViralAI <onboarding@resend.dev>";
+      const { error } = await resendClient.emails.send({
+        from: fromEmail,
+        to: email,
+        subject,
+        text,
+        html,
+      });
+      if (error) {
+        throw new Error(`Resend error: ${error.message}`);
+      }
+      return;
+    } catch (err) {
+      const message = err?.message || "Unknown Resend error";
+      providerErrors.push(message);
+      console.log("OTP email via Resend failed:", message);
     }
-    return;
   }
 
   // --- Fallback: nodemailer SMTP ---
   if (mailTransport) {
-    const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
-    await mailTransport.sendMail({
-      from: `ViralAI <${fromEmail}>`,
-      to: email,
-      subject,
-      text,
-      html,
-    });
-    return;
+    try {
+      const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+      await mailTransport.sendMail({
+        from: `ViralAI <${fromEmail}>`,
+        to: email,
+        subject,
+        text,
+        html,
+      });
+      return;
+    } catch (err) {
+      const message = err?.message || "Unknown SMTP error";
+      providerErrors.push(message);
+      console.log("OTP email via SMTP failed:", message);
+    }
   }
 
   // --- Dev mode: log to console ---
   if (process.env.NODE_ENV !== "production") {
     console.log(`DEV OTP for ${email}: ${otp}`);
     return;
+  }
+
+  if (providerErrors.length > 0) {
+    throw new Error(`OTP delivery failed: ${providerErrors[providerErrors.length - 1]}`);
   }
 
   throw new Error("OTP email service is not configured");
@@ -1409,10 +1426,11 @@ app.post("/signup/request-otp", async (req, res) => {
     return res.json(response);
   } catch (err) {
     console.log("SIGNUP REQUEST OTP ERROR:", err);
-    if (String(err?.message || "").includes("not configured")) {
+    const message = String(err?.message || "");
+    if (message.includes("not configured")) {
       return res.status(503).json({ error: "OTP email service is not configured on server" });
     }
-    return res.status(500).json({ error: "Failed to send OTP" });
+    return res.status(500).json({ error: message || "Failed to send OTP" });
   }
 });
 
@@ -1478,10 +1496,11 @@ app.post("/signup/resend-otp", async (req, res) => {
     return res.json(response);
   } catch (err) {
     console.log("SIGNUP RESEND OTP ERROR:", err);
-    if (String(err?.message || "").includes("not configured")) {
+    const message = String(err?.message || "");
+    if (message.includes("not configured")) {
       return res.status(503).json({ error: "OTP email service is not configured on server" });
     }
-    return res.status(500).json({ error: "Failed to resend OTP" });
+    return res.status(500).json({ error: message || "Failed to resend OTP" });
   }
 });
 
