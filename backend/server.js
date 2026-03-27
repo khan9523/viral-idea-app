@@ -112,8 +112,17 @@ const OTP_MAX_ATTEMPTS = 5;
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
 const OTP_MAX_RESENDS = 5;
 
+const cleanEnvValue = (value) => {
+  if (!value) return null;
+  return String(value).trim().replace(/^"|"$/g, "").replace(/^'|'$/g, "");
+};
+
 // Brevo (primary HTTP API — just set BREVO_API_KEY)
-const BREVO_API_KEY = process.env.BREVO_API_KEY || null;
+const BREVO_API_KEY =
+  cleanEnvValue(process.env.BREVO_API_KEY)
+  || cleanEnvValue(process.env.BREVO_API_V3_KEY)
+  || cleanEnvValue(process.env.SENDINBLUE_API_KEY)
+  || null;
 
 // Resend (secondary HTTP API — set RESEND_API_KEY + verified domain)
 const resendClient = process.env.RESEND_API_KEY
@@ -195,8 +204,8 @@ const sendSignupOtpEmail = async (email, otp) => {
   // --- Primary: Brevo HTTP API (works on Render, no SMTP port needed) ---
   if (BREVO_API_KEY) {
     try {
-      const fromEmail = process.env.BREVO_FROM || process.env.SMTP_FROM || "alfurquan92@gmail.com";
-      const fromName = process.env.BREVO_FROM_NAME || "ViralAI";
+      const fromEmail = cleanEnvValue(process.env.BREVO_FROM) || cleanEnvValue(process.env.SMTP_FROM) || "alfurquan92@gmail.com";
+      const fromName = cleanEnvValue(process.env.BREVO_FROM_NAME) || "ViralAI";
       const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
         method: "POST",
         headers: {
