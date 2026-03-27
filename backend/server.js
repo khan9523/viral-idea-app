@@ -131,6 +131,7 @@ const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
+    family: 4,
   })
   : null;
 
