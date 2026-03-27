@@ -574,7 +574,24 @@ function IdeasGrid({ ideas, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId
   )
 }
 
-function Message({ msg, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, savedIdeaKeys, onGenerateScript, scriptLoadingKey }) {
+function Message({
+  msg,
+  filterCategory,
+  onCopyIdea,
+  onSaveIdea,
+  copiedIdeaId,
+  savedIdeaKeys,
+  onGenerateScript,
+  scriptLoadingKey,
+  messageIndex,
+  onCopyMessage,
+  copiedMessageIndex,
+  onReactMessage,
+  reaction,
+  onShareMessage,
+  onRegenerateMessage,
+  onMoreMessage,
+}) {
   const isUser = msg.role === 'user'
   const ideas = !isUser ? (Array.isArray(msg.ideas) ? msg.ideas : tryParseIdeas(msg.content)) : []
   const sentAt = formatMessageTime(msg.createdAt)
@@ -583,30 +600,121 @@ function Message({ msg, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, sa
     <div className={`message-row ${isUser ? 'user-row' : 'assistant-row'}`}>
       {!isUser && <div className="avatar assistant-avatar" aria-label="Assistant">AI</div>}
 
-      <div className={`bubble ${isUser ? 'user-bubble' : 'assistant-bubble'}`}>
-        {isUser && <p className="bubble-text">{msg.content}</p>}
+      {isUser ? (
+        <div className="bubble user-bubble">
+          <p className="bubble-text">{msg.content}</p>
+          {sentAt && <p className="message-time">{sentAt}</p>}
+        </div>
+      ) : (
+        <div className="assistant-message-wrap">
+          <div className="bubble assistant-bubble">
+            {ideas.length > 0 && (
+              <IdeasGrid
+                ideas={ideas}
+                filterCategory={filterCategory}
+                onCopyIdea={onCopyIdea}
+                onSaveIdea={onSaveIdea}
+                copiedIdeaId={copiedIdeaId}
+                savedIdeaKeys={savedIdeaKeys}
+                onGenerateScript={onGenerateScript}
+                scriptLoadingKey={scriptLoadingKey}
+              />
+            )}
 
-        {!isUser && ideas.length > 0 && (
-          <IdeasGrid
-            ideas={ideas}
-            filterCategory={filterCategory}
-            onCopyIdea={onCopyIdea}
-            onSaveIdea={onSaveIdea}
-            copiedIdeaId={copiedIdeaId}
-            savedIdeaKeys={savedIdeaKeys}
-            onGenerateScript={onGenerateScript}
-            scriptLoadingKey={scriptLoadingKey}
-          />
-        )}
+            {ideas.length === 0 && (
+              <div className="bubble-markdown">
+                <ReactMarkdown>{msg.content}</ReactMarkdown>
+              </div>
+            )}
 
-        {!isUser && ideas.length === 0 && (
-          <div className="bubble-markdown">
-            <ReactMarkdown>{msg.content}</ReactMarkdown>
+            {sentAt && <p className="message-time">{sentAt}</p>}
           </div>
-        )}
 
-        {sentAt && <p className="message-time">{sentAt}</p>}
-      </div>
+          <div className="message-actions" aria-label="Message actions">
+            <button
+              className={`message-action-btn${copiedMessageIndex === messageIndex ? ' active' : ''}`}
+              onClick={() => onCopyMessage(msg.content, messageIndex)}
+              title="Copy"
+              aria-label="Copy"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+
+            <button
+              className={`message-action-btn${reaction === 'like' ? ' active' : ''}`}
+              onClick={() => onReactMessage(messageIndex, 'like')}
+              title="Like"
+              aria-label="Like"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 1.97-1.62l1.38-7A2 2 0 0 0 21.66 11H14" />
+                <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+              </svg>
+            </button>
+
+            <button
+              className={`message-action-btn${reaction === 'dislike' ? ' active' : ''}`}
+              onClick={() => onReactMessage(messageIndex, 'dislike')}
+              title="Dislike"
+              aria-label="Dislike"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-1.97 1.62l-1.38 7A2 2 0 0 0 2.34 13H10" />
+                <path d="M17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" />
+              </svg>
+            </button>
+
+            <button
+              className="message-action-btn"
+              onClick={() => onShareMessage(msg.content)}
+              title="Share"
+              aria-label="Share"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+                <path d="M16 6l-4-4-4 4" />
+                <path d="M12 2v14" />
+              </svg>
+            </button>
+
+            <button
+              className="message-action-btn"
+              onClick={() => onRegenerateMessage(messageIndex)}
+              title="Regenerate"
+              aria-label="Regenerate"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10" />
+                <polyline points="1 20 1 14 7 14" />
+                <path d="M3.51 9a9 9 0 0 1 14.13-3.36L23 10" />
+                <path d="M20.49 15a9 9 0 0 1-14.13 3.36L1 14" />
+              </svg>
+            </button>
+
+            <button
+              className="message-action-btn"
+              onClick={() => onMoreMessage(msg.content)}
+              title="More"
+              aria-label="More"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="5" cy="12" r="1.5" />
+                <circle cx="12" cy="12" r="1.5" />
+                <circle cx="19" cy="12" r="1.5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {isUser && <div className="avatar user-avatar" aria-label="You">YOU</div>}
     </div>
@@ -886,6 +994,8 @@ function App({ googleAuthEnabled = false }) {
   const [activeScriptIdea, setActiveScriptIdea] = useState(null)
   const [scriptLoadingKey, setScriptLoadingKey] = useState(null)
   const [scriptCopied, setScriptCopied] = useState(false)
+  const [copiedMessageIndex, setCopiedMessageIndex] = useState(null)
+  const [messageReactions, setMessageReactions] = useState({})
 
   const [usage, setUsage] = useState({ plan: 'free', usageCount: 0, remaining: 5, dailyLimit: 5 })
   const [showUpgradePopup, setShowUpgradePopup] = useState(false)
@@ -1118,6 +1228,8 @@ function App({ googleAuthEnabled = false }) {
       const data = await res.json()
       setCurrentChatId(data.chat._id)
       const loadedMessages = Array.isArray(data.chat.messages) ? data.chat.messages : []
+      setCopiedMessageIndex(null)
+      setMessageReactions({})
       setMessages(sortMessagesByCreatedAt(loadedMessages))
     } catch (err) {
       console.error('Load chat error:', err)
@@ -1142,6 +1254,8 @@ function App({ googleAuthEnabled = false }) {
       }
 
       setMessages([])
+      setCopiedMessageIndex(null)
+      setMessageReactions({})
       if (data.chat?._id) setCurrentChatId(data.chat._id)
       fetchChats()
     } catch (err) {
@@ -1572,13 +1686,68 @@ function App({ googleAuthEnabled = false }) {
     await sendChatMessage(text, { appendUserMessage: true })
   }
 
-  const handleRegenerate = async () => {
+  const handleRegenerateFromMessage = async (assistantIndex) => {
     if (loading || activePage !== 'chat') return
 
-    const lastUserMessage = [...messages].reverse().find((msg) => msg.role === 'user' && String(msg.content || '').trim())
-    if (!lastUserMessage) return
+    let userPrompt = ''
+    for (let i = assistantIndex - 1; i >= 0; i -= 1) {
+      const msg = messages[i]
+      if (msg?.role === 'user' && String(msg.content || '').trim()) {
+        userPrompt = String(msg.content).trim()
+        break
+      }
+    }
 
-    await sendChatMessage(String(lastUserMessage.content).trim(), { appendUserMessage: false })
+    if (!userPrompt) {
+      const lastUserMessage = [...messages].reverse().find((msg) => msg.role === 'user' && String(msg.content || '').trim())
+      if (lastUserMessage) {
+        userPrompt = String(lastUserMessage.content).trim()
+      }
+    }
+
+    if (!userPrompt) return
+    await sendChatMessage(userPrompt, { appendUserMessage: false })
+  }
+
+  const handleCopyMessage = async (content, index) => {
+    try {
+      await navigator.clipboard.writeText(String(content || ''))
+      setCopiedMessageIndex(index)
+      setTimeout(() => setCopiedMessageIndex(null), 1400)
+    } catch {
+      alert('Could not copy this message.')
+    }
+  }
+
+  const handleShareMessage = async (content) => {
+    const text = String(content || '')
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ text })
+        return
+      } catch {
+        // Fallback to clipboard below.
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text)
+      alert('Message copied. You can paste and share it.')
+    } catch {
+      alert('Share is not available on this device.')
+    }
+  }
+
+  const handleMessageReaction = (index, value) => {
+    setMessageReactions((prev) => ({
+      ...prev,
+      [index]: prev[index] === value ? '' : value,
+    }))
+  }
+
+  const handleMoreMessage = () => {
+    alert('More actions coming soon.')
   }
 
   const handleSelectChat = (chatId) => {
@@ -1592,6 +1761,8 @@ function App({ googleAuthEnabled = false }) {
       const createdChat = await createChat()
       setCurrentChatId(createdChat._id)
       setMessages([])
+      setCopiedMessageIndex(null)
+      setMessageReactions({})
       fetchChats()
       setTimeout(() => inputRef.current?.focus(), 50)
     } catch (err) {
@@ -1745,18 +1916,9 @@ function App({ googleAuthEnabled = false }) {
             <button className="topbar-profile-btn" onClick={handleOpenPricing}>Pricing</button>
             <button className="topbar-profile-btn" onClick={handleOpenBilling}>Billing</button>
             {activePage === 'chat' && (
-              <>
-                <button
-                  className="regenerate-btn"
-                  onClick={handleRegenerate}
-                  disabled={loading || !messages.some((msg) => msg.role === 'user')}
-                >
-                  Regenerate
-                </button>
-                <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
-                  Clear chat
-                </button>
-              </>
+              <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
+                Clear chat
+              </button>
             )}
           </div>
         </header>
@@ -1841,6 +2003,14 @@ function App({ googleAuthEnabled = false }) {
               savedIdeaKeys={savedIdeaKeys}
               onGenerateScript={handleGenerateScript}
               scriptLoadingKey={scriptLoadingKey}
+              messageIndex={i}
+              onCopyMessage={handleCopyMessage}
+              copiedMessageIndex={copiedMessageIndex}
+              onReactMessage={handleMessageReaction}
+              reaction={messageReactions[i]}
+              onShareMessage={handleShareMessage}
+              onRegenerateMessage={handleRegenerateFromMessage}
+              onMoreMessage={handleMoreMessage}
             />
           ))}
 
