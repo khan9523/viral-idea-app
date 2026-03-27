@@ -1468,14 +1468,15 @@ function App({ googleAuthEnabled = false }) {
     }
   }
 
-  const handleSend = async (e) => {
-    e?.preventDefault()
-    const text = input.trim()
+  const sendChatMessage = async (text, { appendUserMessage = true } = {}) => {
     if (!text || loading) return
 
-    const optimisticUserMsg = { role: 'user', content: text, createdAt: new Date().toISOString() }
-    setMessages((prev) => [...prev, optimisticUserMsg])
-    setInput('')
+    if (appendUserMessage) {
+      const optimisticUserMsg = { role: 'user', content: text, createdAt: new Date().toISOString() }
+      setMessages((prev) => [...prev, optimisticUserMsg])
+      setInput('')
+    }
+
     setLoading(true)
     setStreamingText('')
 
@@ -1498,7 +1499,9 @@ function App({ googleAuthEnabled = false }) {
         if (data.code === 'LIMIT_EXCEEDED') {
           setShowUpgradePopup(true)
           setUsage((prev) => ({ ...prev, ...data }))
-          setMessages((prev) => prev.slice(0, -1))
+          if (appendUserMessage) {
+            setMessages((prev) => prev.slice(0, -1))
+          }
           setInput(text)
           setStreamingText('')
           return
@@ -1528,7 +1531,9 @@ function App({ googleAuthEnabled = false }) {
           if (parsed.error) {
             if (parsed.error.includes('LIMIT_EXCEEDED') || parsed.code === 'LIMIT_EXCEEDED') {
               setShowUpgradePopup(true)
-              setMessages((prev) => prev.slice(0, -1))
+              if (appendUserMessage) {
+                setMessages((prev) => prev.slice(0, -1))
+              }
               setInput(text)
               setStreamingText('')
               return
@@ -1559,6 +1564,21 @@ function App({ googleAuthEnabled = false }) {
       setLoading(false)
       setTimeout(() => inputRef.current?.focus(), 50)
     }
+  }
+
+  const handleSend = async (e) => {
+    e?.preventDefault()
+    const text = input.trim()
+    await sendChatMessage(text, { appendUserMessage: true })
+  }
+
+  const handleRegenerate = async () => {
+    if (loading || activePage !== 'chat') return
+
+    const lastUserMessage = [...messages].reverse().find((msg) => msg.role === 'user' && String(msg.content || '').trim())
+    if (!lastUserMessage) return
+
+    await sendChatMessage(String(lastUserMessage.content).trim(), { appendUserMessage: false })
   }
 
   const handleSelectChat = (chatId) => {
@@ -1725,9 +1745,18 @@ function App({ googleAuthEnabled = false }) {
             <button className="topbar-profile-btn" onClick={handleOpenPricing}>Pricing</button>
             <button className="topbar-profile-btn" onClick={handleOpenBilling}>Billing</button>
             {activePage === 'chat' && (
-              <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
-                Clear chat
-              </button>
+              <>
+                <button
+                  className="regenerate-btn"
+                  onClick={handleRegenerate}
+                  disabled={loading || !messages.some((msg) => msg.role === 'user')}
+                >
+                  Regenerate
+                </button>
+                <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
+                  Clear chat
+                </button>
+              </>
             )}
           </div>
         </header>

@@ -1274,6 +1274,12 @@ body {
   .topbar-actions { display: flex; margin-left: auto; gap: 0.35rem; }
   .category-pills { display: none; }
 
+  .regenerate-btn,
+  .clear-chat-btn {
+    padding: 0.28rem 0.58rem;
+    font-size: 0.74rem;
+  }
+
   /* Hide topbar nav buttons on mobile — sidebar handles navigation */
   .topbar-profile-btn { display: none; }
 
@@ -1454,6 +1460,28 @@ body {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+}
+
+.regenerate-btn {
+  border: 1px solid color-mix(in oklab, var(--accent) 40%, var(--border));
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+
+.regenerate-btn:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 60%, var(--border));
+}
+
+.regenerate-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .clear-chat-btn {
