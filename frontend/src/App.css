@@ -575,6 +575,26 @@ body {
   overflow: hidden;
 }
 
+.sidebar-overlay {
+  display: none;
+}
+
+@media (min-width: 641px) {
+  .sidebar {
+    transition: width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+      min-width 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.18s ease;
+  }
+
+  .sidebar:not(.sidebar-open) {
+    width: 0;
+    min-width: 0;
+    opacity: 0;
+    pointer-events: none;
+    border-right: none;
+  }
+}
+
 .sidebar-header {
   display: flex;
   align-items: center;
@@ -1334,7 +1354,7 @@ body {
    Responsive — mobile
    ============================================================ */
 .hamburger-btn {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 34px;
