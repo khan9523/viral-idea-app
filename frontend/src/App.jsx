@@ -1035,7 +1035,7 @@ function App({ googleAuthEnabled = false }) {
   const [copiedIdeaId, setCopiedIdeaId] = useState('')
   const [filterCategory, setFilterCategory] = useState('All')
   const [savedIdeas, setSavedIdeas] = useState([])
-  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 640)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 900)
   const [activeScript, setActiveScript] = useState(null)
   const [activeScriptIdea, setActiveScriptIdea] = useState(null)
   const [scriptLoadingKey, setScriptLoadingKey] = useState(null)
@@ -1095,6 +1095,15 @@ function App({ googleAuthEnabled = false }) {
     localStorage.setItem('darkMode', darkMode)
     document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 900) setSidebarOpen(true)
+    }
+
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('savedIdeas', JSON.stringify(savedIdeas))
@@ -1917,7 +1926,7 @@ function App({ googleAuthEnabled = false }) {
 
   const paymentBusy = paymentLoading || paymentVerifying
   const closeSidebarIfMobile = () => {
-    if (window.innerWidth <= 640) setSidebarOpen(false)
+    if (window.innerWidth <= 900) setSidebarOpen(false)
   }
 
   return (
