@@ -11,6 +11,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import nodemailer from "nodemailer";
+import dns from "dns";
 import { Resend } from "resend";
 import dotenv from "dotenv";
 import OpenAI from "openai";
@@ -131,7 +132,7 @@ const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 15000,
-    family: 4,
+    lookup: (hostname, options, callback) => dns.lookup(hostname, { ...options, family: 4 }, callback),
   })
   : null;
 
