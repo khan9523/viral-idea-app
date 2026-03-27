@@ -40,94 +40,101 @@ const formatMessageTime = (timestamp) => {
 }
 
 function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenProfile, onOpenPricing, onOpenBilling, activePage, darkMode, onToggleDark, onLogout, usage, onUpgrade, paymentLoading, open, onClose }) {
+  const [searchQuery, setSearchQuery] = useState('')
   const used = usage?.usageCount ?? 0
   const limit = usage?.dailyLimit ?? 5
   const remaining = usage?.remaining ?? Math.max(0, limit - used)
   const isPremium = usage?.plan === 'premium'
   const progressPercent = isPremium ? 100 : Math.min(100, Math.round((used / limit) * 100))
   const nearLimit = !isPremium && remaining <= 1
+  const filteredChats = searchQuery.trim()
+    ? chats.filter((c) => (c.title || 'New Chat').toLowerCase().includes(searchQuery.toLowerCase()))
+    : chats
 
   return (
     <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
+
+      {/* Header */}
       <div className="sidebar-header">
-        <span className="sidebar-logo">ViralAI</span>
-        <button className="sidebar-close-btn" onClick={onClose} aria-label="Close menu">&#x2715;</button>
+        <span className="sidebar-logo">✦ ViralAI</span>
+        <button className="sidebar-close-btn" onClick={onClose} aria-label="Close sidebar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <rect x="3" y="3" width="18" height="18" rx="3" />
+            <path d="M9 3v18" />
+          </svg>
+        </button>
       </div>
 
-      <div className="plan-card">
-        <span className={`plan-badge ${isPremium ? 'premium' : 'free'}`}>
-          {isPremium ? 'Premium' : 'Free'}
-        </span>
-
-        <div className="usage-meta">
-          {isPremium ? (
-            <p>Unlimited generations</p>
-          ) : (
-            <>
-              <p>{used} / {limit} requests used</p>
-              <p className="usage-remaining">{remaining} requests remaining today</p>
-              {nearLimit && <p className="usage-warning">You are close to your daily limit.</p>}
-            </>
-          )}
-        </div>
-
-        {!isPremium && (
-          <div className="usage-progress" aria-label="Usage progress">
-            <div className="usage-progress-fill" style={{ width: `${progressPercent}%` }} />
-          </div>
-        )}
-
-        {!isPremium && (
-          <button className="upgrade-btn" onClick={onUpgrade} disabled={paymentLoading}>
-            {paymentLoading ? 'Redirecting...' : 'Upgrade to Premium'}
-          </button>
-        )}
-      </div>
-
-      <div className="sidebar-new-chat-wrap">
-        <button className="sidebar-new-chat" title="New chat" onClick={onNewChat}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 5v14M5 12h14" />
+      {/* New chat */}
+      <div className="sidebar-top-actions">
+        <button className="sidebar-nav-item sidebar-new-chat-item" onClick={onNewChat} title="New chat">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
           </svg>
           New chat
         </button>
+      </div>
 
-        <button className={`sidebar-profile-btn${activePage === 'profile' ? ' active' : ''}`} title="Profile" onClick={onOpenProfile}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M20 21a8 8 0 0 0-16 0" />
-            <circle cx="12" cy="7" r="4" />
+      {/* Search */}
+      <div className="sidebar-search-wrap">
+        <svg className="sidebar-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input
+          className="sidebar-search-input"
+          type="search"
+          placeholder="Search chats"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Search chats"
+        />
+        {searchQuery && (
+          <button className="sidebar-search-clear" onClick={() => setSearchQuery('')} aria-label="Clear search">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="sidebar-nav-section">
+        <button className={`sidebar-nav-item${activePage === 'profile' ? ' active' : ''}`} onClick={onOpenProfile}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M20 21a8 8 0 0 0-16 0" /><circle cx="12" cy="7" r="4" />
           </svg>
           Profile
         </button>
-
-        <button className={`sidebar-profile-btn${activePage === 'pricing' ? ' active' : ''}`} title="Pricing" onClick={onOpenPricing}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="12" y1="1" x2="12" y2="23" />
-            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+        <button className={`sidebar-nav-item${activePage === 'pricing' ? ' active' : ''}`} onClick={onOpenPricing}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
           Pricing
         </button>
-          <button className={`sidebar-profile-btn${activePage === 'billing' ? ' active' : ''}`} title="Billing" onClick={onOpenBilling}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="5" width="20" height="14" rx="2" />
-              <line x1="2" y1="10" x2="22" y2="10" />
-            </svg>
-            Billing
-          </button>
-      </div>
+        <button className={`sidebar-nav-item${activePage === 'billing' ? ' active' : ''}`} onClick={onOpenBilling}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+          </svg>
+          Billing
+        </button>
+      </nav>
 
+      {/* Recent chats */}
       <div className="sidebar-section-label">Recent chats</div>
 
       <nav className="chat-list">
-        {chats.length === 0 && <p className="sidebar-empty">No chats yet</p>}
-        {chats.map((chat) => (
+        {filteredChats.length === 0 && (
+          <p className="sidebar-empty">{searchQuery ? 'No matching chats' : 'No chats yet'}</p>
+        )}
+        {filteredChats.map((chat) => (
           <button
             key={chat._id}
             className={`chat-item${currentChatId === chat._id ? ' active' : ''}`}
             onClick={() => onSelectChat(chat._id)}
             title={chat.title || 'New Chat'}
           >
-            <svg className="chat-item-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg className="chat-item-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
             <span className="chat-item-text">{chat.title || 'New Chat'}</span>
@@ -135,13 +142,52 @@ function Sidebar({ chats, currentChatId, onSelectChat, onNewChat, onOpenProfile,
         ))}
       </nav>
 
+      {/* Footer */}
       <div className="sidebar-footer">
-        <button className="icon-btn footer-btn" onClick={onToggleDark} title="Toggle dark mode">
-          {darkMode ? 'Light' : 'Dark'}
-        </button>
-        <button className="icon-btn footer-btn logout-btn" onClick={onLogout} title="Logout">
-          Logout
-        </button>
+        {!isPremium && (
+          <div className="sidebar-usage-strip">
+            <div className="sidebar-usage-bar">
+              <div className="sidebar-usage-bar-fill" style={{ width: `${progressPercent}%` }} />
+            </div>
+            <div className="sidebar-usage-row">
+              <span className="sidebar-usage-text">{used}/{limit} requests{nearLimit ? ' — almost full' : ''}</span>
+              <button className="sidebar-upgrade-chip" onClick={onUpgrade} disabled={paymentLoading}>
+                {paymentLoading ? '…' : 'Upgrade'}
+              </button>
+            </div>
+          </div>
+        )}
+        {isPremium && (
+          <div className="sidebar-usage-strip">
+            <span className="sidebar-usage-text sidebar-premium-badge">✦ Premium — Unlimited</span>
+          </div>
+        )}
+        <div className="sidebar-footer-user">
+          <div className="sidebar-footer-avatar">{isPremium ? '★' : 'U'}</div>
+          <span className="sidebar-footer-label">{isPremium ? 'Premium plan' : 'Free plan'}</span>
+          <button className="sidebar-icon-action" onClick={onToggleDark} title={darkMode ? 'Light mode' : 'Dark mode'} aria-label="Toggle theme">
+            {darkMode ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </button>
+          <button className="sidebar-icon-action sidebar-logout-btn" onClick={onLogout} title="Logout" aria-label="Logout">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </button>
+        </div>
       </div>
     </aside>
   )
