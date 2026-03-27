@@ -953,10 +953,86 @@ body {
   font-size: inherit;
   margin: 0;
   padding: 0;
-  background: none;
-  border: none;
 }
 
+/* Markdown rendered inside AI bubbles */
+.bubble-markdown {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.bubble-markdown p {
+  margin: 0 0 0.6em;
+}
+
+.bubble-markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-markdown strong {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bubble-markdown em {
+  font-style: italic;
+}
+
+.bubble-markdown ul,
+.bubble-markdown ol {
+  margin: 0.4em 0 0.6em 1.3em;
+  padding: 0;
+}
+
+.bubble-markdown li {
+  margin-bottom: 0.25em;
+}
+
+.bubble-markdown h1,
+.bubble-markdown h2,
+.bubble-markdown h3 {
+  font-weight: 700;
+  margin: 0.8em 0 0.3em;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.bubble-markdown h1 { font-size: 1.15rem; }
+.bubble-markdown h2 { font-size: 1.05rem; }
+.bubble-markdown h3 { font-size: 0.97rem; }
+
+.bubble-markdown code {
+  font-family: 'Menlo', 'Consolas', monospace;
+  font-size: 0.87em;
+  background: color-mix(in oklab, var(--bg-sidebar) 80%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.bubble-markdown pre {
+  background: color-mix(in oklab, var(--bg-sidebar) 90%, black 10%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.bubble-markdown pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 0.88em;
+}
+
+.bubble-markdown blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+  margin: 0.5em 0;
+  color: var(--text-secondary);
+}
 .message-time {
   margin-top: 0.45rem;
   color: #4ade80;

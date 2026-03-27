@@ -1,5 +1,6 @@
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { GoogleLogin } from '@react-oauth/google'
+import ReactMarkdown from 'react-markdown'
 import './App.css'
 
 const API_URL =
@@ -598,7 +599,11 @@ function Message({ msg, filterCategory, onCopyIdea, onSaveIdea, copiedIdeaId, sa
           />
         )}
 
-        {!isUser && ideas.length === 0 && <pre className="bubble-text bubble-stream">{msg.content}</pre>}
+        {!isUser && ideas.length === 0 && (
+          <div className="bubble-markdown">
+            <ReactMarkdown>{msg.content}</ReactMarkdown>
+          </div>
+        )}
 
         {sentAt && <p className="message-time">{sentAt}</p>}
       </div>
@@ -1815,7 +1820,9 @@ function App({ googleAuthEnabled = false }) {
             <div className="message-row assistant-row">
               <div className="avatar assistant-avatar" aria-label="Assistant">AI</div>
               <div className="bubble assistant-bubble">
-                <pre className="bubble-text bubble-stream">{streamingText}</pre>
+                <div className="bubble-markdown">
+                  <ReactMarkdown>{streamingText}</ReactMarkdown>
+                </div>
               </div>
             </div>
           )}
