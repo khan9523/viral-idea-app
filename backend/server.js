@@ -112,7 +112,10 @@ const OTP_MAX_ATTEMPTS = 5;
 const OTP_RESEND_COOLDOWN_SECONDS = 45;
 const OTP_MAX_RESENDS = 5;
 
-// Resend (primary — just set RESEND_API_KEY)
+// Brevo (primary HTTP API — just set BREVO_API_KEY)
+const BREVO_API_KEY = process.env.BREVO_API_KEY || null;
+
+// Resend (secondary HTTP API — set RESEND_API_KEY + verified domain)
 const resendClient = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null;
@@ -136,7 +139,9 @@ const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.
   })
   : null;
 
-if (resendClient) {
+if (BREVO_API_KEY) {
+  console.log("Email: using Brevo API");
+} else if (resendClient) {
   console.log("Email: using Resend API");
 } else if (mailTransport) {
   mailTransport.verify()
@@ -187,7 +192,39 @@ const sendSignupOtpEmail = async (email, otp) => {
   const html = buildOtpHtml(otp);
   const providerErrors = [];
 
-  // --- Primary: Resend API ---
+  // --- Primary: Brevo HTTP API (works on Render, no SMTP port needed) ---
+  if (BREVO_API_KEY) {
+    try {
+      const fromEmail = process.env.BREVO_FROM || process.env.SMTP_FROM || "alfurquan92@gmail.com";
+      const fromName = process.env.BREVO_FROM_NAME || "ViralAI";
+      const resp = await fetch("https://api.brevo.com/v3/smtp/email", {
+        method: "POST",
+        headers: {
+          "accept": "application/json",
+          "content-type": "application/json",
+          "api-key": BREVO_API_KEY,
+        },
+        body: JSON.stringify({
+          sender: { name: fromName, email: fromEmail },
+          to: [{ email }],
+          subject,
+          htmlContent: html,
+          textContent: text,
+        }),
+      });
+      if (!resp.ok) {
+        const errBody = await resp.json().catch(() => ({}));
+        throw new Error(`Brevo error ${resp.status}: ${errBody.message || resp.statusText}`);
+      }
+      return;
+    } catch (err) {
+      const message = err?.message || "Unknown Brevo error";
+      providerErrors.push(message);
+      console.log("OTP email via Brevo failed:", message);
+    }
+  }
+
+  // --- Secondary: Resend API ---
   if (resendClient) {
     try {
       const fromEmail = process.env.RESEND_FROM || "ViralAI <onboarding@resend.dev>";
