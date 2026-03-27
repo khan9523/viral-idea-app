@@ -1720,25 +1720,26 @@ function App({ googleAuthEnabled = false }) {
             <button className="topbar-profile-btn" onClick={handleOpenPricing}>Pricing</button>
             <button className="topbar-profile-btn" onClick={handleOpenBilling}>Billing</button>
             {activePage === 'chat' && (
-              <>
-                <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
-                  Clear chat
-                </button>
-                <div className="category-pills">
-                  {CATEGORIES.map((cat) => (
-                    <button
-                      key={cat}
-                      className={`category-pill${filterCategory === cat ? ' active' : ''}`}
-                      onClick={() => setFilterCategory(cat)}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </>
+              <button className="clear-chat-btn" onClick={handleClearChat} disabled={!currentChatId || loading || messages.length === 0}>
+                Clear chat
+              </button>
             )}
           </div>
         </header>
+
+        {activePage === 'chat' && (
+          <div className="category-bar">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                className={`category-pill${filterCategory === cat ? ' active' : ''}`}
+                onClick={() => setFilterCategory(cat)}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
 
         {paymentSuccess && <div className="payment-success-banner">{paymentSuccess}</div>}
 

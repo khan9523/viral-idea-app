@@ -1522,6 +1522,20 @@ body {
   font-size: 0.88rem;
 }
 
+.category-bar {
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  background: color-mix(in oklab, var(--bg-main) 92%, black 8%);
+}
+
+.category-bar::-webkit-scrollbar { display: none; }
+
 .category-pills {
   display: flex;
   gap: 0.35rem;
