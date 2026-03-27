@@ -561,7 +561,8 @@ STYLE:
 OUTPUT:
 Generate 2–3 viral content ideas. For each idea:
 - Label it (e.g. "Idea 1: [catchy title]")
-- Bullet point the key details, angle, and why it would go viral
+- Bullet point the key details and why it would go viral
+- Do NOT include any "Angle" section or "Angle:" heading
 
 FOLLOW-UP:
 At the end, ask 1–2 natural follow-up questions to help refine the ideas further.`;
