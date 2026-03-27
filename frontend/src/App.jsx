@@ -2018,9 +2018,11 @@ function App({ googleAuthEnabled = false }) {
           {streamingText && (
             <div className="message-row assistant-row">
               <div className="avatar assistant-avatar" aria-label="Assistant">AI</div>
-              <div className="bubble assistant-bubble">
-                <div className="bubble-markdown">
-                  <ReactMarkdown>{streamingText}</ReactMarkdown>
+              <div className="assistant-message-wrap">
+                <div className="bubble assistant-bubble">
+                  <div className="bubble-markdown">
+                    <ReactMarkdown>{streamingText}</ReactMarkdown>
+                  </div>
                 </div>
               </div>
             </div>
