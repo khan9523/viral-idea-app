@@ -117,11 +117,16 @@ const cleanEnvValue = (value) => {
   return String(value).trim().replace(/^"|"$/g, "").replace(/^'|'$/g, "");
 };
 
+const cleanApiKey = (value) => {
+  const cleaned = cleanEnvValue(value);
+  return cleaned ? cleaned.replace(/\s+/g, "") : null;
+};
+
 // Brevo (primary HTTP API — just set BREVO_API_KEY)
 const BREVO_API_KEY =
-  cleanEnvValue(process.env.BREVO_API_KEY)
-  || cleanEnvValue(process.env.BREVO_API_V3_KEY)
-  || cleanEnvValue(process.env.SENDINBLUE_API_KEY)
+  cleanApiKey(process.env.BREVO_API_KEY)
+  || cleanApiKey(process.env.BREVO_API_V3_KEY)
+  || cleanApiKey(process.env.SENDINBLUE_API_KEY)
   || null;
 
 // Resend (secondary HTTP API — set RESEND_API_KEY + verified domain)
@@ -150,6 +155,9 @@ const mailTransport = process.env.SMTP_HOST && process.env.SMTP_USER && process.
 
 if (BREVO_API_KEY) {
   console.log("Email: using Brevo API");
+  if (!BREVO_API_KEY.startsWith("xkeysib-")) {
+    console.log("Email: Brevo API key format looks unusual");
+  }
 } else if (resendClient) {
   console.log("Email: using Resend API");
 } else if (mailTransport) {
