@@ -777,6 +777,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg-main);
   position: relative;
@@ -1194,12 +1195,15 @@ body {
 
   .hamburger-btn { display: flex; }
   .sidebar-close-btn { display: flex; align-items: center; }
-  .topbar-actions { display: flex; margin-left: auto; }
+  .topbar-actions { display: flex; margin-left: auto; gap: 0.35rem; }
   .category-pills { display: none; }
 
+  /* Hide topbar nav buttons on mobile — sidebar handles navigation */
+  .topbar-profile-btn { display: none; }
+
   .chat-topbar {
-    height: 48px;
-    padding: 0 0.8rem;
+    height: 52px;
+    padding: 0 max(0.8rem, env(safe-area-inset-left)) 0 max(0.8rem, env(safe-area-inset-right));
   }
 
   .messages-area { padding: 1rem 0.5rem 1rem; }
@@ -1208,7 +1212,13 @@ body {
 
   .message-row { max-width: 100%; }
 
-  .input-bar { padding: 0.5rem 0.5rem max(0.4rem, env(safe-area-inset-bottom)); }
+  .input-bar {
+    padding: 0.5rem 0.5rem max(0.4rem, env(safe-area-inset-bottom));
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+  }
+
+  .input-hint { display: none; }
 
   .profile-wrap {
     padding: 0.8rem;
@@ -1235,11 +1245,6 @@ body {
     font-size: 0.9rem;
   }
 
-  /* Ensure topbar content fits on narrow screens */
-  .chat-topbar {
-    padding-left: max(0.8rem, env(safe-area-inset-left));
-    padding-right: max(0.8rem, env(safe-area-inset-right));
-  }
 }
 
 /* Extra-small screens: iPhone SE, Galaxy A-series, etc. */
