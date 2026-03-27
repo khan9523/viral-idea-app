@@ -1960,6 +1960,21 @@ function App({ googleAuthEnabled = false }) {
         onClose={() => setSidebarOpen(false)}
       />
 
+      {activePage === 'chat' && !sidebarOpen && (
+        <button
+          className="mobile-sidebar-fab"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open sidebar"
+          type="button"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="3" y1="6" x2="21" y2="6" />
+            <line x1="3" y1="12" x2="21" y2="12" />
+            <line x1="3" y1="18" x2="21" y2="18" />
+          </svg>
+        </button>
+      )}
+
       <main className="chat-main">
         <header className="chat-topbar">
           <button className="hamburger-btn" onClick={() => setSidebarOpen((open) => !open)} aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}>

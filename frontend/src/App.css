@@ -1385,6 +1385,29 @@ body {
 }
 .sidebar-close-btn:hover { background: var(--chat-hover); color: var(--text-primary); }
 
+.mobile-sidebar-fab {
+  display: none;
+  position: fixed;
+  top: calc(max(env(safe-area-inset-top), 0px) + 0.65rem);
+  left: 0.7rem;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--bg-main) 86%, black 14%);
+  color: var(--text-primary);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 960;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+  transition: background 0.16s ease;
+}
+
+.mobile-sidebar-fab:hover {
+  background: var(--chat-hover);
+}
+
 @media (max-width: 900px) {
   .sidebar {
     position: fixed;
@@ -1415,6 +1438,14 @@ body {
 
   .topbar-profile-btn {
     display: none;
+  }
+
+  .hamburger-btn {
+    display: none;
+  }
+
+  .mobile-sidebar-fab {
+    display: inline-flex;
   }
 }
 
