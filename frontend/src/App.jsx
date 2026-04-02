@@ -1132,6 +1132,10 @@ function App({ googleAuthEnabled = false }) {
   }, [savedIdeas])
 
   useEffect(() => {
+    trackEvent('visit', 'funnel', 'App Visit')
+  }, [])
+
+  useEffect(() => {
     trackEvent('page_view', 'navigation', `Page: ${activePage}`)
     pageViewStartedAtRef.current = Date.now()
 
@@ -1413,7 +1417,7 @@ function App({ googleAuthEnabled = false }) {
       }
 
       completeLogin(data.token)
-      trackEvent('login', 'user', 'User Login')
+      trackEvent('login', 'user', 'Login Success')
       setAuthPassword('')
     } catch (err) {
       setAuthError(err.message || 'Login failed')
@@ -1473,7 +1477,7 @@ function App({ googleAuthEnabled = false }) {
       }
 
       completeLogin(verifyData.token)
-      trackEvent('signup', 'user', 'User Signup')
+      trackEvent('signup', 'user', 'Signup Success')
       setAuthPassword('')
       setAuthOtp('')
       setAuthOtpStep(false)
@@ -1572,6 +1576,7 @@ function App({ googleAuthEnabled = false }) {
       }
 
       if (premiumActivated) {
+        trackEvent('purchase', 'conversion', 'Premium Purchase')
         setShowPaymentSuccess(true)
         await Promise.all([fetchProfile(), fetchBillingData()])
       } else {
@@ -1590,6 +1595,7 @@ function App({ googleAuthEnabled = false }) {
   }
 
   const handleUpgrade = async () => {
+    trackEvent('premium_click', 'conversion', 'Upgrade Button')
     setPaymentLoading(true)
     setPaymentSuccess('')
     try {
@@ -1631,6 +1637,7 @@ function App({ googleAuthEnabled = false }) {
             }
 
             setUsage((prev) => ({ ...prev, ...(verifyData.usage || {}), plan: 'premium' }))
+            trackEvent('purchase', 'conversion', 'Premium Purchase')
             setPaymentSuccess('Payment successful! You are now Premium.')
             await Promise.all([fetchUsage(), fetchProfile(), fetchBillingData()])
             alert('Payment successful! You are now Premium 🎉')
@@ -1783,7 +1790,7 @@ function App({ googleAuthEnabled = false }) {
     const text = input.trim()
     if (!text || loading) return
 
-    trackEvent('generate_idea', 'engagement', 'Generate Button Click')
+    trackEvent('generate_idea', 'engagement', 'Generate Button')
     await sendChatMessage(text, { appendUserMessage: true })
   }
 
