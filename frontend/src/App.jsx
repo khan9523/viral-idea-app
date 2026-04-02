@@ -10,6 +10,27 @@ const API_URL =
     : 'https://viral-idea-app.onrender.com')
 
 const CATEGORIES = ['All', 'Funny', 'Educational', 'Viral']
+const GA_DEBUG = import.meta.env.DEV || import.meta.env.VITE_GA_DEBUG === 'true'
+
+const logGA = (label, payload) => {
+  if (!GA_DEBUG) return
+  console.info('[GA4]', label, payload)
+}
+
+function trackEvent(action, category, label) {
+  const payload = {
+    event_category: category,
+    event_label: label,
+  }
+
+  if (typeof window === 'undefined' || typeof window.gtag !== 'function') {
+    logGA('Skipped event (gtag unavailable)', { action, ...payload })
+    return
+  }
+
+  logGA('Event', { action, ...payload })
+  window.gtag('event', action, payload)
+}
 
 const tryParseIdeas = (content) => {
   if (!content) return []
@@ -1074,6 +1095,7 @@ function App({ googleAuthEnabled = false }) {
 
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const pageViewStartedAtRef = useRef(Date.now())
 
   const savedIdeaKeys = useMemo(() => new Set(savedIdeas.map(ideaKey)), [savedIdeas])
 
@@ -1108,6 +1130,25 @@ function App({ googleAuthEnabled = false }) {
   useEffect(() => {
     localStorage.setItem('savedIdeas', JSON.stringify(savedIdeas))
   }, [savedIdeas])
+
+  useEffect(() => {
+    trackEvent('page_view', 'navigation', `Page: ${activePage}`)
+    pageViewStartedAtRef.current = Date.now()
+
+    return () => {
+      const timeSpentSeconds = Math.round((Date.now() - pageViewStartedAtRef.current) / 1000)
+      if (timeSpentSeconds <= 0 || typeof window === 'undefined' || typeof window.gtag !== 'function') return
+
+      const timePayload = {
+        event_category: 'engagement',
+        event_label: `Page: ${activePage}`,
+        value: timeSpentSeconds,
+      }
+
+      logGA('Event', { action: 'time_on_page', ...timePayload })
+      window.gtag('event', 'time_on_page', timePayload)
+    }
+  }, [activePage])
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -1372,6 +1413,7 @@ function App({ googleAuthEnabled = false }) {
       }
 
       completeLogin(data.token)
+      trackEvent('login', 'user', 'User Login')
       setAuthPassword('')
     } catch (err) {
       setAuthError(err.message || 'Login failed')
@@ -1431,6 +1473,7 @@ function App({ googleAuthEnabled = false }) {
       }
 
       completeLogin(verifyData.token)
+      trackEvent('signup', 'user', 'User Signup')
       setAuthPassword('')
       setAuthOtp('')
       setAuthOtpStep(false)
@@ -1735,9 +1778,12 @@ function App({ googleAuthEnabled = false }) {
     }
   }
 
-  const handleSend = async (e) => {
+  const handleGenerate = async (e) => {
     e?.preventDefault()
     const text = input.trim()
+    if (!text || loading) return
+
+    trackEvent('generate_idea', 'engagement', 'Generate Button Click')
     await sendChatMessage(text, { appendUserMessage: true })
   }
 
@@ -2105,7 +2151,7 @@ function App({ googleAuthEnabled = false }) {
         )}
 
         {activePage === 'chat' && <div className="input-bar">
-          <form className="input-form" onSubmit={handleSend}>
+          <form className="input-form" onSubmit={handleGenerate}>
             <textarea
               ref={inputRef}
               className="chat-input"
@@ -2116,7 +2162,7 @@ function App({ googleAuthEnabled = false }) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
-                  handleSend()
+                  handleGenerate()
                 }
               }}
               disabled={loading}
