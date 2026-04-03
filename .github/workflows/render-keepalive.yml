@@ -8,27 +8,61 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Ping Render health endpoint
         env:
           TARGET_URL: ${{ secrets.RENDER_HEALTHCHECK_URL }}
           TARGET_URL_VAR: ${{ vars.RENDER_HEALTHCHECK_URL }}
         run: |
-          url="$TARGET_URL"
-          if [ -z "$url" ]; then
-            url="$TARGET_URL_VAR"
-          fi
+          url="${TARGET_URL:-$TARGET_URL_VAR}"
 
           if [ -z "$url" ]; then
             echo "RENDER_HEALTHCHECK_URL is not configured in secrets/vars. Skipping keep-alive ping."
             exit 0
           fi
 
+          url="${url%/}"
+          if [[ "$url" != */health ]]; then
+            url="$url/health"
+          fi
+
           echo "Pinging $url"
-          status=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 3 --retry-connrefused --max-time 20 "$url")
+
+          curl_args=(
+            --silent
+            --show-error
+            --location
+            --output /dev/null
+            --write-out "%{http_code}"
+            --retry 5
+            --retry-delay 5
+            --retry-all-errors
+            --retry-connrefused
+            --connect-timeout 10
+            --max-time 90
+          )
+
+          set +e
+          status=$(curl "${curl_args[@]}" "$url")
+          curl_exit=$?
+          set -e
+
+          if [ "$curl_exit" -ne 0 ]; then
+            echo "curl failed with exit code $curl_exit"
+
+            if [ "$curl_exit" -eq 28 ]; then
+              echo "Render likely cold-started or timed out. Treating this keep-alive run as non-fatal."
+              exit 0
+            fi
+
+            exit "$curl_exit"
+          fi
+
           echo "HTTP $status"
 
           case "$status" in
             2*|3*) exit 0 ;;
+            5*) echo "Render returned a transient server error. Treating this keep-alive run as non-fatal."; exit 0 ;;
             *) echo "Non-success status from keep-alive ping"; exit 1 ;;
           esac
